@@ -18,6 +18,7 @@
 #include <rocksdb/status.h>
 #include <rocksdb/utilities/options_util.h>
 #include <rocksdb/write_batch.h>
+#include <fstream>
 
 namespace {
   const std::string PROP_NAME = "rocksdb.dbname";
@@ -424,6 +425,12 @@ DB::Status RocksdbDB::ReadSingle(const std::string &table, const std::string &ke
                                  std::vector<Field> &result) {
   std::string data;
   rocksdb::Status s = db_->Get(rocksdb::ReadOptions(), key, &data);
+  #ifdef GEN_WORKLOAD
+  std::fstream f;
+	f.open("../workload/workload", std::ios::out | std::ios::app);
+	f << key <<std::endl;
+	f.close();
+  #endif
   if (s.IsNotFound()) {
     return kNotFound;
   } else if (!s.ok()) {

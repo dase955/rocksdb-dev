@@ -425,7 +425,7 @@ void DoTest(std::string test_name) {
   options.use_direct_reads = true;
   options.enable_pipelined_write = true;
   options.compression = rocksdb::kNoCompression;
-  options.nvm_path = "/mnt/chen/nodememory";
+  options.nvm_path = "/pg_wal/ycc/memory_art";
   options.IncreaseParallelism(16);
 
   std::string db_path = "/tmp/tmp_data/db_test_" + test_name;

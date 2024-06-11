@@ -23,6 +23,7 @@
 #include "db/art/heat_group_manager.h"
 #include "db/art/global_memtable.h"
 #include "db/art/vlog_manager.h"
+#include "db/art/heat_buckets.h"
 #include "db/column_family.h"
 #include "db/compaction/compaction_job.h"
 #include "db/dbformat.h"
@@ -1896,6 +1897,8 @@ class DBImpl : public DB {
   TimerCompaction* compact_timer_;
 
   HeatGroupManager* group_manager_;
+
+  HeatBuckets* heat_buckets_;
 
   // Offset of last record written by leader writer.
   uint64_t last_record_offset_;

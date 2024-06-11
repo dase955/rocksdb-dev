@@ -133,4 +133,13 @@ namespace ROCKSDB_NAMESPACE {
 #define CLWB(ptr, len)
 #endif
 
+/*
+ * Macros for additional work on WaLSM -- WaLSM+
+ */
+
+// micros for HeatBuckets
+#define SEPERATORS_PATH "/home/ycc/WaLSM/workload/seperators"
+#define BUCKETS_PERIOD 20000
+#define BUCKETS_ALPHA 0.2
+
 }  // namespace ROCKSDB_NAMESPACE
