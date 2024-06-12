@@ -12,19 +12,12 @@ class Bucket;
 class HeatBuckets;
 
 class Bucket {
-private:
+public:
     double hotness_;
     uint32_t hit_cnt_;
-    // std::mutex mutex_;
-    // std::set<std::string> keys_;
 
-public:
     Bucket();
     ~Bucket();
-
-    const double& hotness(); 
-    const uint32_t& hit_cnt(); 
-    // const size_t& keys_cnt(); // unique keys cnt in a period
 
     // when one time period end, update hotness_, h_(i+1) = alpha * h_i + hit_cnt_ / period_cnt
     void update(const double& alpha, const uint32_t& period_cnt); 
@@ -39,22 +32,18 @@ public:
 */
 class HeatBuckets {
 private:
-    std::vector<std::string> seperators_;
-    std::vector<Bucket> buckets_;
-    uint32_t period_cnt_;  // the get count of one period, should be fixed
-    uint32_t current_cnt_; // current get count in this period
-    double alpha_;
-    std::vector<std::unique_ptr<std::mutex>> mutex_ptrs_;
-    std::mutex cnt_mutex_;
+    static std::vector<std::string> seperators_;
+    static std::vector<Bucket> buckets_;
+    static uint32_t period_cnt_;  // the get count of one period, should be fixed
+    static uint32_t current_cnt_; // current get count in this period
+    static double alpha_;
+    static std::vector<std::unique_ptr<std::mutex>> mutex_ptrs_;
+    static std::mutex cnt_mutex_;
     
 public:
     HeatBuckets();
     HeatBuckets(const std::string& path, const double& alpha, const uint32_t& period_cnt);
     ~HeatBuckets();
-
-    const uint32_t& period_cnt(); // get fixed period_cnt_
-    const uint32_t& current_cnt(); // get current current_cnt_;
-    const double& alpha(); // get fixed remaining coefficient alpha
 
     int32_t locate(const std::string& key); // locate which bucket hitted by this key
 

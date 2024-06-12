@@ -10,7 +10,7 @@ int main() {
     // simple args, avoid using command line arg or config file
     const std::string input_workload = "workload";
     const std::string output_seperators = "seperators";
-    const int key_range_num = 5;
+    const int key_range_num = 500;
 
     std::set<std::string> keys;
     std::string key;

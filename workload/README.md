@@ -3,7 +3,7 @@
 simple run 
 
 ``` shell
-cd workload
+cd workloads
 g++ generator.cc -o generator
 ./generator
 ```

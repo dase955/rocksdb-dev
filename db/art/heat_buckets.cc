@@ -4,6 +4,14 @@
 #include <cassert>
 
 namespace ROCKSDB_NAMESPACE {
+std::vector<std::string> HeatBuckets::seperators_;
+std::vector<Bucket> HeatBuckets::buckets_;
+uint32_t HeatBuckets::period_cnt_;  // the get count of one period, should be fixed
+uint32_t HeatBuckets::current_cnt_; // current get count in this period
+double HeatBuckets::alpha_;
+std::vector<std::unique_ptr<std::mutex>> HeatBuckets::mutex_ptrs_;
+std::mutex HeatBuckets::cnt_mutex_;
+
 
 Bucket::Bucket() {
     hit_cnt_ = 0;
@@ -13,14 +21,6 @@ Bucket::Bucket() {
 
 Bucket::~Bucket() {
     return; // destroy nothing
-}
-
-const double& Bucket::hotness() {
-    return hotness_;
-}
-
-const uint32_t& Bucket::hit_cnt() {
-    return hit_cnt_;
 }
 
 /*
@@ -61,6 +61,7 @@ HeatBuckets::HeatBuckets(const std::string& path, const double& alpha, const uin
         throw "failed to open key range seperators file!";
     }
 
+    seperators_.resize(0);
     while (std::getline(input, seperator)) {
         seperators_.push_back(seperator);
     }
@@ -70,6 +71,7 @@ HeatBuckets::HeatBuckets(const std::string& path, const double& alpha, const uin
 
     // 2. init buckets_
     const size_t buckets_num = seperators_.size() - 1; // bucketss number = seperators num - 1
+    buckets_.resize(0);
     buckets_.resize(buckets_num); // auto call Bucket::Bucket()
     std::cout << "set heat buckets size to " << buckets_.size() << std::endl;
 
@@ -85,7 +87,8 @@ HeatBuckets::HeatBuckets(const std::string& path, const double& alpha, const uin
 
     // 5. init mutex ptr container
     const size_t mutex_ptrs_num = buckets_num;
-    for (int i=0; i<mutex_ptrs_num; i++) {
+    mutex_ptrs_.resize(0);
+    for (size_t i=0; i<mutex_ptrs_num; i++) {
         mutex_ptrs_.push_back(std::unique_ptr<std::mutex>(new std::mutex()));
     }
     std::cout << "set mutex ptrs size to " << mutex_ptrs_.size() << std::endl;
@@ -95,55 +98,30 @@ HeatBuckets::~HeatBuckets() {
     return; // destroy nothing
 }
 
-const uint32_t& HeatBuckets::period_cnt() {
-    return period_cnt_;
-}
-
-const uint32_t& HeatBuckets::current_cnt() {
-    return current_cnt_;
-}
-
-const double& HeatBuckets::alpha() {
-    return alpha_;
-}
-
 void HeatBuckets::debug() {
-    std::cout << "[Debug] current cnt in this period: " << current_cnt() << std::endl;
+    std::cout << "[Debug] current cnt in this period: " << current_cnt_ << std::endl;
     for (auto& bucket : buckets_) {
         std::cout << "[Debug] ";
-        std::cout << "bucket hotness : " << bucket.hotness();
-        std::cout << ", bucket hit cnt : " << bucket.hit_cnt();
+        std::cout << "bucket hotness : " << bucket.hotness_;
+        std::cout << ", bucket hit cnt : " << bucket.hit_cnt_;
         // std::cout << ", bucket keys cnt : " << bucket.keys_cnt();
         std::cout << std::endl;
     }
 }
 
 void HeatBuckets::update() {
-    /*
-    we use mutexs container in HeatBuckets instead of Bucket, so this bug description below is derelict
 
-    // bug : only guarentee one bucket writen by one thread
-    // but when you update hotness of all buckets, previous buckets will update hotness earlier.
-    // if we hit this previous bucket, this will add 1 to the counter of this bucket
-    // however the current cnt of HeatBuckets still not reset to 0
-    // this means when the current cnt of this HeatBuckets reset to 0
-    // there are several buckets counter already more than 0
-    // therefore the estimated frequency of those buckets will be more than true frequency
-    // the simplest way is make there is only one write to HeatBuckets
-    // but this method will make read performance of db worser
-    // so we will make the fixed period cnt big enouch and divide into more key range (more buckets)
-    // this will lower the influence of these over-estimated frequencies
-    // In the same way, bucket set keys_ may contain uncorrect keys
-    */
+    // bug : when update, the sum of all buckets cnt may not more or less than period_cnt_.
+    // we decide to use bigger period_cnt_ and divide into more buckets.
 
     assert(mutex_ptrs_.size() == buckets_.size());
-    for (int i=0; i<mutex_ptrs_.size(); i++) {
+    for (size_t i=0; i<mutex_ptrs_.size(); i++) {
         mutex_ptrs_[i]->lock();
     }
 
     // TODO: use multiple threads to update hotness of all buckets
-    for (int i=0; i<buckets_.size(); i++) {
-        buckets_[i].update(alpha(), period_cnt());
+    for (size_t i=0; i<buckets_.size(); i++) {
+        buckets_[i].update(alpha_, period_cnt_);
         mutex_ptrs_[i]->unlock();
     }
     // remember to reset current_cnt_ counter
@@ -183,11 +161,11 @@ void HeatBuckets::hit(const std::string& key) {
     */
     index = locate(key);
 
-    std::cout << "debug seperators_ size : " << seperators_.size() << std::endl;
-    std::cout << "debug buckets_ size : " << buckets_.size() << std::endl;
-    std::cout << "debug mutex_ptrs_ size : " << mutex_ptrs_.size() << std::endl;
-    std::cout << "debug period_cnt_ : " << period_cnt_ << std::endl;
-    std::cout << "debug alpha_ : " << alpha_ << std::endl;
+    // std::cout << "debug seperators_ size : " << seperators_.size() << std::endl;
+    // std::cout << "debug buckets_ size : " << buckets_.size() << std::endl;
+    // std::cout << "debug mutex_ptrs_ size : " << mutex_ptrs_.size() << std::endl;
+    // std::cout << "debug period_cnt_ : " << period_cnt_ << std::endl;
+    // std::cout << "debug alpha_ : " << alpha_ << std::endl;
     assert(index >= 0 && index < buckets_.size());
     assert(seperators_[index] <= key && key < seperators_[index+1]);
     assert(index >= 0 && index < mutex_ptrs_.size());
@@ -198,13 +176,9 @@ void HeatBuckets::hit(const std::string& key) {
 
     cnt_mutex_.lock();
     current_cnt_ += 1;
-
-    // DEBUG code
-    if (current_cnt_ % BUCKETS_PERIOD == 0) {
-        debug();
-    }
-
-    if (current_cnt_ >= period_cnt_) {
+   
+    if (current_cnt_ % period_cnt_ == 0) {
+        // debug();
         update();
     }
     cnt_mutex_.unlock();

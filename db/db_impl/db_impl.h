@@ -1898,8 +1898,9 @@ class DBImpl : public DB {
 
   HeatGroupManager* group_manager_;
 
-  HeatBuckets* heat_buckets_;
-
+#ifdef ART_PLUS
+  HeatBuckets heat_buckets_;
+#endif
   // Offset of last record written by leader writer.
   uint64_t last_record_offset_;
 

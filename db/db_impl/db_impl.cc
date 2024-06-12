@@ -300,9 +300,9 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname,
   global_memtable_ = new GlobalMemtable(
       vlog_manager_, group_manager_, env_, recovery);
 
-  heat_buckets_ = new HeatBuckets();
-  std::cout << "Buckets_ address : ";
-  std::cout << std::hex << heat_buckets_ << std::endl;
+  // heat_buckets_ = new HeatBuckets();
+  // std::cout << "Buckets_ address : ";
+  // std::cout << std::hex << heat_buckets_ << std::endl;
 
   Compactor::compaction_threshold_ = options.compaction_threshold;
 
@@ -1747,9 +1747,9 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
 #ifdef ART
   std::string art_key(key.data(), key.size());
 #ifdef ART_PLUS
-  std::cout << "Buckets_ address : ";
-  std::cout << std::hex << heat_buckets_ << std::endl;
-  heat_buckets_->hit(art_key);
+  // std::cout << "Buckets_ address : ";
+  // std::cout << std::hex << heat_buckets_ << std::endl;
+  heat_buckets_.hit(art_key);
   // std::cout << "hit : " << art_key << std::endl;
 #endif
   done = global_memtable_->Get(art_key, *get_impl_options.value->GetSelf(), &s);
