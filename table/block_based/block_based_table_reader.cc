@@ -2291,7 +2291,7 @@ Status BlockBasedTable::Get(const ReadOptions& read_options, const Slice& key,
     bool done = false;
     for (iiter->Seek(key); iiter->Valid() && !done; iiter->Next()) {
       IndexValue v = iiter->value();
-
+      // WaLSM+ dont use BlockBasedFilter, so not_exist_in_filter always false
       bool not_exist_in_filter =
           filter != nullptr && filter->IsBlockBased() == true &&
           !filter->KeyMayMatch(ExtractUserKeyAndStripTimestamp(key, ts_sz),

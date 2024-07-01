@@ -31,8 +31,8 @@ const size_t& Bucket::keys_cnt() {
 
 void Bucket::update(const double& alpha, const uint32_t& period_cnt) {
     // mutex_.lock();
-    hotness_ = alpha * hotness_ + 
-                double(hit_cnt_) / double(period_cnt);
+    hotness_ = (1 - alpha) * hotness_ + 
+                alpha * double(hit_cnt_) / double(period_cnt);
     hit_cnt_ = 0; // remember to reset counter
     // keys_.clear();
     // mutex_.unlock(); // remember to unlock!!!
@@ -65,25 +65,25 @@ HeatBuckets::HeatBuckets(const std::string& path, const double& alpha, const uin
     while (std::getline(input, seperator)) {
         seperators_.push_back(seperator);
     }
-    std::cout << "success load key range seperators" << std::endl; 
-    std::cout << "key range seperators count : " << seperators_.size() << std::endl;
+    // std::cout << "success load key range seperators" << std::endl; 
+    // std::cout << "key range seperators count : " << seperators_.size() << std::endl;
     input.close();
 
     // 2. init buckets_
     const size_t buckets_num = seperators_.size() - 1; // bucketss number = seperators num - 1
     buckets_.resize(0);
     buckets_.resize(buckets_num); // auto call Bucket::Bucket()
-    std::cout << "set heat buckets size to " << buckets_.size() << std::endl;
+    // std::cout << "set heat buckets size to " << buckets_.size() << std::endl;
 
     // 3. init period_cnt_ and alpha_, two variables should be fixed after init
     period_cnt_ = period_cnt;
     alpha_ = alpha;
-    std::cout << "set period_cnt_ to " << period_cnt_ << std::endl;
-    std::cout << "set alpha_ to " << alpha_ << std::endl;
+    // std::cout << "set period_cnt_ to " << period_cnt_ << std::endl;
+    // std::cout << "set alpha_ to " << alpha_ << std::endl;
 
     // 4. init current_cnt_
     current_cnt_ = 0;
-    std::cout << "set current_cnt_ to " << current_cnt_ << std::endl;
+    // std::cout << "set current_cnt_ to " << current_cnt_ << std::endl;
 
     // 5. init mutex ptr container
     const size_t mutex_ptrs_num = buckets_num;
@@ -91,7 +91,8 @@ HeatBuckets::HeatBuckets(const std::string& path, const double& alpha, const uin
     for (size_t i=0; i<mutex_ptrs_num; i++) {
         mutex_ptrs_.push_back(std::unique_ptr<std::mutex>(new std::mutex()));
     }
-    std::cout << "set mutex ptrs size to " << mutex_ptrs_.size() << std::endl;
+    // std::cout << "set mutex ptrs size to " << mutex_ptrs_.size() << std::endl;
+    std::cout << "enable heat buckets estimates" << std::endl;
 }
 
 HeatBuckets::~HeatBuckets() {
