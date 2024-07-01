@@ -95,6 +95,3 @@ cmake-build-release
 
 *_example
 inode_vptrs
-
-workloads/*
-seperators
