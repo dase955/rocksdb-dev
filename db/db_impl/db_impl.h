@@ -18,6 +18,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <ctime>
 
 #include "db/art/compactor.h"
 #include "db/art/heat_group_manager.h"
@@ -1900,6 +1901,15 @@ class DBImpl : public DB {
 
 #ifdef ART_PLUS
   HeatBuckets heat_buckets_;
+
+  // monitor low-level segments min key and max key
+  std::vector<std::vector<std::string>> segments_info_;
+
+  // record get cnt in current period, when equal to PERIOD_COUNT, start next period
+  uint32_t get_cnt_;
+
+  // record period cnt, if period_cnt_ % TRAIN_PERIODS = 0, start to evaluate or retrain model
+  uint32_t period_cnt_;
 #endif
   // Offset of last record written by leader writer.
   uint64_t last_record_offset_;

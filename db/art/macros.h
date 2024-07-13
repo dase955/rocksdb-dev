@@ -138,8 +138,14 @@ namespace ROCKSDB_NAMESPACE {
  */
 
 // micros for HeatBuckets
-#define SEPERATORS_PATH "/home/ycc/WaLSM/workloads/seperators"
-#define BUCKETS_PERIOD 1000000
-#define BUCKETS_ALPHA 0.1
+#define BUCKETS_ALPHA 0.2
+#define SAMPLES_LIMIT 10000
+#define SAMPLES_MAXCNT 5000000
+#define PERIOD_COUNT 200000
+#define DEFAULT_BUCKETS 500
+#define MAGIC_FACTOR 500
+
+// micors for Model Train
+#define TRAIN_PERIODS 10
 
 }  // namespace ROCKSDB_NAMESPACE

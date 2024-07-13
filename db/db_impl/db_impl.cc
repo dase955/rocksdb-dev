@@ -241,6 +241,12 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname,
       closed_(false),
       error_handler_(this, immutable_db_options_, &mutex_),
       atomic_flush_install_cv_(&mutex_) {
+// WaLSM+
+#ifdef ART_PLUS
+  get_cnt_ = 0;
+  period_cnt_ = 0;
+#endif
+  
   // !batch_per_trx_ implies seq_per_batch_ because it is only unset for
   // WriteUnprepared, which should use seq_per_batch_.
   assert(batch_per_txn_ || seq_per_batch_);
@@ -1744,13 +1750,21 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
 
   // Change
   // std::cout << "ready for get" << std::endl;
+// WaLSM+: add hotness estimating
 #ifdef ART
   std::string art_key(key.data(), key.size());
 #ifdef ART_PLUS
-  // std::cout << "Buckets_ address : ";
-  // std::cout << std::hex << heat_buckets_ << std::endl;
-  heat_buckets_.hit(art_key);
-  // std::cout << "hit : " << art_key << std::endl;
+  // ready to estimate hotness
+  if (heat_buckets_.is_ready()) {
+    get_cnt_ += 1;
+    if (get_cnt_ >= PERIOD_COUNT) {
+      heat_buckets_.hit(art_key, true);
+      get_cnt_ = 0;
+      period_cnt_ += 1;
+    } else {
+      heat_buckets_.hit(art_key, false);
+    }
+  }
 #endif
   done = global_memtable_->Get(art_key, *get_impl_options.value->GetSelf(), &s);
 #else
