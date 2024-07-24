@@ -94,8 +94,10 @@ Slice FullFilterBlockBuilder::Finish(const BlockHandle& /*tmp*/,
 
 FullFilterBlockReader::FullFilterBlockReader(
     const BlockBasedTable* t,
-    CachableEntry<ParsedFullFilterBlock>&& filter_block)
-    : FilterBlockReaderCommon(t, std::move(filter_block)) {
+    CachableEntry<ParsedFullFilterBlock>&& filter_block,
+    const int hash_id)
+    : FilterBlockReaderCommon(t, std::move(filter_block)),
+      hash_id_(hash_id) {
   const SliceTransform* const prefix_extractor = table_prefix_extractor();
   if (prefix_extractor) {
     full_length_enabled_ =
@@ -115,7 +117,7 @@ bool FullFilterBlockReader::KeyMayMatch(
   if (!whole_key_filtering()) {
     return true;
   }
-  return MayMatch(key, no_io, get_context, lookup_context);
+  return MayMatch(key, no_io, get_context, lookup_context, hash_id_);
 }
 
 std::unique_ptr<FilterBlockReader> FullFilterBlockReader::Create(
@@ -154,12 +156,12 @@ bool FullFilterBlockReader::PrefixMayMatch(
   (void)block_offset;
 #endif
   assert(block_offset == kNotValid);
-  return MayMatch(prefix, no_io, get_context, lookup_context);
+  return MayMatch(prefix, no_io, get_context, lookup_context, hash_id_);
 }
 
 bool FullFilterBlockReader::MayMatch(
     const Slice& entry, bool no_io, GetContext* get_context,
-    BlockCacheLookupContext* lookup_context) const {
+    BlockCacheLookupContext* lookup_context, const int hash_id) const {
   CachableEntry<ParsedFullFilterBlock> filter_block;
 
   const Status s =
@@ -175,7 +177,7 @@ bool FullFilterBlockReader::MayMatch(
       filter_block.GetValue()->filter_bits_reader();
 
   if (filter_bits_reader) {
-    if (filter_bits_reader->MayMatch(entry)) {
+    if (filter_bits_reader->MayMatch(entry, hash_id)) {
       PERF_COUNTER_ADD(bloom_sst_hit_count, 1);
       return true;
     } else {
@@ -199,7 +201,7 @@ void FullFilterBlockReader::KeysMayMatch(
     // present
     return;
   }
-  MayMatch(range, no_io, nullptr, lookup_context);
+  MayMatch(range, no_io, nullptr, lookup_context, hash_id_);
 }
 
 void FullFilterBlockReader::PrefixesMayMatch(
@@ -215,7 +217,7 @@ void FullFilterBlockReader::PrefixesMayMatch(
 
 void FullFilterBlockReader::MayMatch(
     MultiGetRange* range, bool no_io, const SliceTransform* prefix_extractor,
-    BlockCacheLookupContext* lookup_context) const {
+    BlockCacheLookupContext* lookup_context, const int hash_id) const {
   CachableEntry<ParsedFullFilterBlock> filter_block;
 
   const Status s = GetOrReadFilterBlock(no_io, range->begin()->get_context,
@@ -254,7 +256,7 @@ void FullFilterBlockReader::MayMatch(
     }
   }
 
-  filter_bits_reader->MayMatch(num_keys, &keys[0], &may_match[0]);
+  filter_bits_reader->MayMatch(num_keys, &keys[0], &may_match[0], hash_id);
 
   int i = 0;
   for (auto iter = filter_range.begin(); iter != filter_range.end(); ++iter) {

@@ -99,7 +99,8 @@ class FullFilterBlockReader
   // set prefix_extractor if needed
   // In our work, dont use prefix_extractor
   FullFilterBlockReader(const BlockBasedTable* t,
-                        CachableEntry<ParsedFullFilterBlock>&& filter_block);
+                        CachableEntry<ParsedFullFilterBlock>&& filter_block,
+                        const int hash_id = 0);
   // call FullFilterBlockReader() to return std::unique_ptr<FilterBlockReader>
   static std::unique_ptr<FilterBlockReader> Create(
       const BlockBasedTable* table, const ReadOptions& ro,
@@ -142,11 +143,12 @@ class FullFilterBlockReader
  private:
   // Get From Cache Or Read From SST, to get filter, then check whether entry hit
   bool MayMatch(const Slice& entry, bool no_io, GetContext* get_context,
-                BlockCacheLookupContext* lookup_context) const;
+                BlockCacheLookupContext* lookup_context, const int hash_id = 0) const;
   // range is the key range in the SST, check out these keys may fit in the filter
   void MayMatch(MultiGetRange* range, bool no_io,
                 const SliceTransform* prefix_extractor,
-                BlockCacheLookupContext* lookup_context) const;
+                BlockCacheLookupContext* lookup_context, 
+                const int hash_id = 0) const;
   // when disable prefix bloom, never call this method
   bool IsFilterCompatible(const Slice* iterate_upper_bound, const Slice& prefix,
                           const Comparator* comparator) const;
@@ -154,6 +156,7 @@ class FullFilterBlockReader
  private:
   bool full_length_enabled_;
   size_t prefix_extractor_full_length_;
+  const int hash_id_;
 };
 
 }  // namespace ROCKSDB_NAMESPACE

@@ -5,18 +5,28 @@
 
 #include "table/block_based/partitioned_filter_block.h"
 
+#include <atomic>
+#include <cstring>
+#include <memory>
 #include <utility>
 
+#include "db/dbformat.h"
 #include "file/file_util.h"
 #include "monitoring/perf_context_imp.h"
 #include "port/malloc.h"
 #include "port/port.h"
+#include "rocksdb/comparator.h"
 #include "rocksdb/filter_policy.h"
+#include "rocksdb/slice.h"
+#include "rocksdb/status.h"
 #include "table/block_based/block.h"
 #include "table/block_based/block_based_table_reader.h"
 #include "util/coding.h"
 
 namespace ROCKSDB_NAMESPACE {
+Slice generate_modified_internal_key(std::unique_ptr<const char[]>& buf,
+                                     Slice original_internal_key,
+                                     int filter_index, int segment_id);
 
 PartitionedFilterBlockBuilder::PartitionedFilterBlockBuilder(
     const SliceTransform* _prefix_extractor, bool whole_key_filtering,
@@ -55,6 +65,11 @@ PartitionedFilterBlockBuilder::PartitionedFilterBlockBuilder(
       }
     }
   }
+
+  filter_count_ = filter_bits_builder->filter_count_;
+  filter_gc.resize(filter_count_);
+  filters.resize(filter_count_);
+  finishing_filter_index_ = 0;
 }
 
 PartitionedFilterBlockBuilder::~PartitionedFilterBlockBuilder() {}
@@ -70,7 +85,6 @@ void PartitionedFilterBlockBuilder::MaybeCutAFilterBlock(
   if (!p_index_builder_->ShouldCutFilterBlock()) {
     return;
   }
-  filter_gc.push_back(std::unique_ptr<const char[]>(nullptr));
 
   // Add the prefix of the next key before finishing the partition. This hack,
   // fixes a bug with format_verison=3 where seeking for the prefix would lead
@@ -81,9 +95,12 @@ void PartitionedFilterBlockBuilder::MaybeCutAFilterBlock(
     FullFilterBlockBuilder::AddPrefix(*next_key);
   }
 
-  Slice filter = filter_bits_builder_->Finish(&filter_gc.back());
-  std::string& index_key = p_index_builder_->GetPartitionKey();
-  filters.push_back({index_key, filter});
+  for (int i = 0; i < filter_count_; ++i) {
+    filter_gc[i].push_back(std::unique_ptr<const char[]>(nullptr));
+    Slice filter = filter_bits_builder_->Finish(&filter_gc[i].back(), i);
+    std::string& index_key = p_index_builder_->GetPartitionKey();
+    filters[i].push_back({index_key, filter, segment_id_base_.fetch_add(1, std::memory_order_relaxed)});
+  }
   keys_added_to_partition_ = 0;
   Reset();
 }
@@ -102,7 +119,7 @@ Slice PartitionedFilterBlockBuilder::Finish(
     const BlockHandle& last_partition_block_handle, Status* status) {
   if (finishing_filters == true) {
     // Record the handle of the last written filter block in the index
-    FilterEntry& last_entry = filters.front();
+    FilterEntry& last_entry = filters[finishing_filter_index_].front();
     std::string handle_encoding;
     last_partition_block_handle.EncodeTo(&handle_encoding);
     std::string handle_delta_encoding;
@@ -111,20 +128,32 @@ Slice PartitionedFilterBlockBuilder::Finish(
         last_partition_block_handle.size() - last_encoded_handle_.size());
     last_encoded_handle_ = last_partition_block_handle;
     const Slice handle_delta_encoding_slice(handle_delta_encoding);
-    index_on_filter_block_builder_.Add(last_entry.key, handle_encoding,
+    
+    std::unique_ptr<const char[]> modified_key_buf;
+    Slice modified_key = generate_modified_internal_key(
+        modified_key_buf, last_entry.key, finishing_filter_index_,
+        last_entry.segment_id);
+    index_on_filter_block_builder_.Add(modified_key, handle_encoding,
                                        &handle_delta_encoding_slice);
     if (!p_index_builder_->seperator_is_key_plus_seq()) {
       index_on_filter_block_builder_without_seq_.Add(
-          ExtractUserKey(last_entry.key), handle_encoding,
+          ExtractUserKey(modified_key), handle_encoding,
           &handle_delta_encoding_slice);
     }
-    filters.pop_front();
+    filters[finishing_filter_index_].pop_front();
   } else {
     MaybeCutAFilterBlock(nullptr);
   }
   // If there is no filter partition left, then return the index on filter
   // partitions
-  if (UNLIKELY(filters.empty())) {
+  if (UNLIKELY(filters[finishing_filter_index_].empty())) {
+    finishing_filter_index_++;
+    if (finishing_filter_index_ < filter_count_) {
+      *status = Status::Incomplete();
+      finishing_filters = true;
+      return filters[finishing_filter_index_].front().filter;
+    }
+
     *status = Status::OK();
     if (finishing_filters) {
       if (p_index_builder_->seperator_is_key_plus_seq()) {
@@ -141,7 +170,7 @@ Slice PartitionedFilterBlockBuilder::Finish(
     // indicate we expect more calls to Finish
     *status = Status::Incomplete();
     finishing_filters = true;
-    return filters.front().filter;
+    return filters[finishing_filter_index_].front().filter;
   }
 }
 
@@ -235,10 +264,12 @@ void PartitionedFilterBlockReader::PrefixesMayMatch(
 BlockHandle PartitionedFilterBlockReader::GetFilterPartitionHandle(
     const CachableEntry<Block>& filter_block, const Slice& entry) const {
   IndexBlockIter iter;
-  const InternalKeyComparator* const comparator = internal_comparator();
+  // const InternalKeyComparator* const comparator = internal_comparator();
+  const Comparator* const segment_id_removing_comparator = table()->get_rep()->segment_id_removing_comparator.get();
   Statistics* kNullStats = nullptr;
   filter_block.GetValue()->NewIndexIterator(
-      comparator->user_comparator(),
+      // comparator->user_comparator(),
+      segment_id_removing_comparator,
       table()->get_rep()->get_global_seqno(BlockType::kFilter), &iter,
       kNullStats, true /* total_order_seek */, false /* have_first_key */,
       index_key_includes_seq(), index_value_is_full());
@@ -256,6 +287,7 @@ BlockHandle PartitionedFilterBlockReader::GetFilterPartitionHandle(
   return fltr_blk_handle;
 }
 
+// TODO: retrieve filter block from filter cache (WaLSM+)
 Status PartitionedFilterBlockReader::GetFilterPartitionBlock(
     FilePrefetchBuffer* prefetch_buffer, const BlockHandle& fltr_blk_handle,
     bool no_io, GetContext* get_context,
@@ -289,6 +321,7 @@ Status PartitionedFilterBlockReader::GetFilterPartitionBlock(
   return s;
 }
 
+// TODO: retrieve filter block from filter cache (WaLSM+)
 bool PartitionedFilterBlockReader::MayMatch(
     const Slice& slice, const SliceTransform* prefix_extractor,
     uint64_t block_offset, bool no_io, const Slice* const_ikey_ptr,
@@ -306,11 +339,18 @@ bool PartitionedFilterBlockReader::MayMatch(
     return true;
   }
 
-  auto filter_handle = GetFilterPartitionHandle(filter_block, *const_ikey_ptr);
+  // find key "0 original_internal key". filter_index=segment_id=0. (WaLSM+)
+  // segment_id itself is useless in comparison, 
+  // but must be appended otherwise the extracted user key will be incorrect.
+  std::unique_ptr<const char[]> modified_key_buf;
+  Slice modified_key =
+      generate_modified_internal_key(modified_key_buf, *const_ikey_ptr, 0, 0);
+  auto filter_handle = GetFilterPartitionHandle(filter_block, modified_key);
   if (UNLIKELY(filter_handle.size() == 0)) {  // key is out of range
     return false;
   }
 
+  // TODO: get some filter blocks from the filter cache and check (WaLSM+)
   CachableEntry<ParsedFullFilterBlock> filter_partition_block;
   s = GetFilterPartitionBlock(nullptr /* prefetch_buffer */, filter_handle,
                               no_io, get_context, lookup_context,
@@ -322,11 +362,16 @@ bool PartitionedFilterBlockReader::MayMatch(
 
   FullFilterBlockReader filter_partition(table(),
                                          std::move(filter_partition_block));
+  // initialize the reader with hash_id (WaLSM+)
+  // FullFilterBlockReader filter_partition(table(),
+                                        //  std::move(filter_partition_block),
+                                        //  1);
   return (filter_partition.*filter_function)(
       slice, prefix_extractor, block_offset, no_io, const_ikey_ptr, get_context,
       lookup_context);
 }
 
+// TODO: retrieve filter block from filter cache (WaLSM+)
 void PartitionedFilterBlockReader::MayMatch(
     MultiGetRange* range, const SliceTransform* prefix_extractor,
     uint64_t block_offset, bool no_io, BlockCacheLookupContext* lookup_context,
@@ -350,9 +395,15 @@ void PartitionedFilterBlockReader::MayMatch(
   // share block cache lookup and use full filter multiget on the partition
   // filter.
   for (auto iter = start_iter_same_handle; iter != range->end(); ++iter) {
+    // find key "0 original_internal key". filter_index=segment_id=0. (WaLSM+)
+    // segment_id itself is useless in comparison, 
+    // but must be appended otherwise the extracted user key will be incorrect.
+    std::unique_ptr<const char[]> modified_key_buf;
+    Slice modified_key =
+        generate_modified_internal_key(modified_key_buf, iter->ikey, 0, 0);   
     // TODO: re-use one top-level index iterator
     BlockHandle this_filter_handle =
-        GetFilterPartitionHandle(filter_block, iter->ikey);
+        GetFilterPartitionHandle(filter_block, modified_key);
     if (!prev_filter_handle.IsNull() &&
         this_filter_handle != prev_filter_handle) {
       MultiGetRange subrange(*range, start_iter_same_handle, iter);
@@ -380,6 +431,7 @@ void PartitionedFilterBlockReader::MayMatch(
   }
 }
 
+// TODO: retrieve filter block from filter cache (WaLSM+)
 void PartitionedFilterBlockReader::MayMatchPartition(
     MultiGetRange* range, const SliceTransform* prefix_extractor,
     uint64_t block_offset, BlockHandle filter_handle, bool no_io,
@@ -394,6 +446,10 @@ void PartitionedFilterBlockReader::MayMatchPartition(
     return;  // Any/all may match
   }
 
+  // initialize the reader with hash_id (WaLSM+)
+  // FullFilterBlockReader filter_partition(table(),
+                                        //  std::move(filter_partition_block),
+                                        //  1);
   FullFilterBlockReader filter_partition(table(),
                                          std::move(filter_partition_block));
   (filter_partition.*filter_function)(range, prefix_extractor, block_offset,
@@ -439,9 +495,10 @@ void PartitionedFilterBlockReader::CacheDependencies(const ReadOptions& ro,
 
   IndexBlockIter biter;
   const InternalKeyComparator* const comparator = internal_comparator();
+  const Comparator* const segment_id_removing_comparator = rep->segment_id_removing_comparator.get(); 
   Statistics* kNullStats = nullptr;
   filter_block.GetValue()->NewIndexIterator(
-      comparator->user_comparator(), rep->get_global_seqno(BlockType::kFilter),
+      segment_id_removing_comparator, rep->get_global_seqno(BlockType::kFilter),
       &biter, kNullStats, true /* total_order_seek */,
       false /* have_first_key */, index_key_includes_seq(),
       index_value_is_full());
@@ -510,6 +567,28 @@ bool PartitionedFilterBlockReader::index_value_is_full() const {
   assert(table()->get_rep());
 
   return table()->get_rep()->index_value_is_full;
+}
+
+std::atomic<uint32_t> PartitionedFilterBlockBuilder::segment_id_base_{0};
+
+Slice generate_modified_internal_key(std::unique_ptr<const char[]>& buf, Slice original_internal_key, int filter_index, int segment_id) {
+  // calculate modified_key (WaLSM+)
+  // +--------------+------------------------------------+------------+-------------------------+
+  // | filter_index | original_user_key                  | segment_id | original_internal_bytes |
+  // |    4 bytes   | (key.size() - kInternalBytes) bytes|   4 bytes  | kInternalBytes bytes    |
+  // +--------------+------------------------------------+------------+-------------------------+
+  size_t modified_key_buf_size = 4 + original_internal_key.size() + 4;
+  char *modified_key_buf = new char[modified_key_buf_size];
+  Slice original_user_key = ExtractUserKey(original_internal_key);
+  Slice original_internal_bytes = ExtractInternalBytes(original_internal_key);
+  EncodeFixed32R(modified_key_buf, filter_index);
+  std::memcpy(modified_key_buf + 4, original_user_key.data(), original_user_key.size());
+  EncodeFixed32R(modified_key_buf + 4 + original_user_key.size(), segment_id);
+  std::memcpy(modified_key_buf + 4 + original_user_key.size() + 4, original_user_key.data_, original_user_key.size());
+  Slice modified_key = Slice(modified_key_buf, modified_key_buf_size);
+
+  buf.reset(modified_key_buf);
+  return modified_key;
 }
 
 }  // namespace ROCKSDB_NAMESPACE
