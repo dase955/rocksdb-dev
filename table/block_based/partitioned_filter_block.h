@@ -5,9 +5,12 @@
 
 #pragma once
 
+#include <atomic>
+#include <cstdint>
 #include <list>
 #include <string>
 #include <unordered_map>
+#include <vector>
 #include "db/dbformat.h"
 #include "index_builder.h"
 #include "rocksdb/options.h"
@@ -45,10 +48,11 @@ class PartitionedFilterBlockBuilder : public FullFilterBlockBuilder {
   struct FilterEntry {
     std::string key;
     Slice filter;
+    uint32_t segment_id;
   };
-  std::list<FilterEntry> filters;  // list of partitioned indexes and their keys
+  std::vector<std::list<FilterEntry>> filters;  // list of partitioned indexes and their keys
   std::unique_ptr<IndexBuilder> value;
-  std::vector<std::unique_ptr<const char[]>> filter_gc;
+  std::vector<std::vector<std::unique_ptr<const char[]>>> filter_gc;
   bool finishing_filters =
       false;  // true if Finish is called once but not complete yet.
   // The policy of when cut a filter block and Finish it
@@ -63,6 +67,12 @@ class PartitionedFilterBlockBuilder : public FullFilterBlockBuilder {
   // The number of keys added to the last partition so far
   uint32_t keys_added_to_partition_;
   BlockHandle last_encoded_handle_;
+
+  // The number of filter builders(hash functions) for each segment. (WaLSM+)
+  int filter_count_;
+  // When Finish() is called, return filters[filter_index].front() (WaLSM+)
+  int finishing_filter_index_;
+  static std::atomic<uint32_t> segment_id_base_;
 };
 
 class PartitionedFilterBlockReader : public FilterBlockReaderCommon<Block> {

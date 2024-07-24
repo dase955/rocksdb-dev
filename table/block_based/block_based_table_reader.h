@@ -9,8 +9,10 @@
 
 #pragma once
 
+#include <memory>
 #include "db/range_tombstone_fragmenter.h"
 #include "file/filename.h"
+#include "rocksdb/comparator.h"
 #include "table/block_based/block_based_table_factory.h"
 #include "table/block_based/block_type.h"
 #include "table/block_based/cachable_entry.h"
@@ -527,6 +529,7 @@ struct BlockBasedTable::Rep {
         table_options(_table_opt),
         filter_policy(skip_filters ? nullptr : _table_opt.filter_policy.get()),
         internal_comparator(_internal_comparator),
+        segment_id_removing_comparator(SegmentIdRemovingComparator(_internal_comparator.user_comparator())),
         filter_type(FilterType::kNoFilter),
         index_type(BlockBasedTableOptions::IndexType::kBinarySearch),
         hash_index_allow_collision(false),
@@ -542,6 +545,7 @@ struct BlockBasedTable::Rep {
   const BlockBasedTableOptions table_options;
   const FilterPolicy* const filter_policy;
   const InternalKeyComparator& internal_comparator;
+  const std::unique_ptr<Comparator> segment_id_removing_comparator;
   Status status;
   std::unique_ptr<RandomAccessFileReader> file;
   char cache_key_prefix[kMaxCacheKeyPrefixSize];

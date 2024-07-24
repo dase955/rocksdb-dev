@@ -8,7 +8,11 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <deque>
+#include <memory>
+#include <vector>
 
 #include "rocksdb/filter_policy.h"
 
@@ -354,13 +358,13 @@ class LegacyBloomBitsBuilder : public BuiltinFilterBitsBuilder {
   void operator=(const LegacyBloomBitsBuilder&) = delete;
 
   ~LegacyBloomBitsBuilder() override;
-  
+
   // hash to one value and push into hash_entries_
   // noticed that Hash use double hashing, we only need one hash value h
   // then use double hashing
   void AddKey(const Slice& key) override;
 
-  // already collect hash values, just write to filter, 
+  // already collect hash values, just write to filter,
   // return slice(real filter bits + num_probes(1 bit) + num_lines(4 bits))
   Slice Finish(std::unique_ptr<const char[]>* buf) override;
 
@@ -379,6 +383,8 @@ class LegacyBloomBitsBuilder : public BuiltinFilterBitsBuilder {
     return LegacyBloomImpl::EstimatedFpRate(keys, bytes - /*metadata*/ 5,
                                             num_probes_);
   }
+
+  int hash_id_;
 
  private:
   int bits_per_key_;
@@ -406,7 +412,8 @@ class LegacyBloomBitsBuilder : public BuiltinFilterBitsBuilder {
 
 LegacyBloomBitsBuilder::LegacyBloomBitsBuilder(const int bits_per_key,
                                                Logger* info_log)
-    : bits_per_key_(bits_per_key),
+    : hash_id_(0),
+      bits_per_key_(bits_per_key),
       num_probes_(LegacyNoLocalityBloomImpl::ChooseNumProbes(bits_per_key_)),
       info_log_(info_log) {
   assert(bits_per_key_);
@@ -415,7 +422,7 @@ LegacyBloomBitsBuilder::LegacyBloomBitsBuilder(const int bits_per_key,
 LegacyBloomBitsBuilder::~LegacyBloomBitsBuilder() {}
 
 void LegacyBloomBitsBuilder::AddKey(const Slice& key) {
-  uint32_t hash = BloomHash(key);
+  uint32_t hash = BloomHashId(key, hash_id_);
   if (hash_entries_.size() == 0 || hash != hash_entries_.back()) {
     hash_entries_.push_back(hash);
   }
@@ -538,6 +545,67 @@ inline void LegacyBloomBitsBuilder::AddHash(uint32_t h, char* data,
                            folly::constexpr_log2(CACHE_LINE_SIZE));
 }
 
+class MultiLegacyBloomBitsBuilder : public FilterBitsBuilder {
+ public:
+  explicit MultiLegacyBloomBitsBuilder(const size_t filter_count,
+                                       const int bits_per_key,
+                                       Logger* info_log);
+  ~MultiLegacyBloomBitsBuilder();
+
+  // No copy allowed
+  MultiLegacyBloomBitsBuilder(const MultiLegacyBloomBitsBuilder&) = delete;
+  void operator=(const MultiLegacyBloomBitsBuilder&) = delete;
+
+  virtual void AddKey(const Slice& key) override;
+  virtual Slice Finish(std::unique_ptr<const char[]>* buf) override;
+  virtual Slice Finish(std::unique_ptr<const char[]>* buf,
+                       const int hash_id) override;
+
+ private:
+  std::vector<LegacyBloomBitsBuilder*> bits_builders_;
+
+  void AddHash(uint32_t h, char* data, uint32_t num_lines, uint32_t total_bits);
+};
+
+MultiLegacyBloomBitsBuilder::MultiLegacyBloomBitsBuilder(
+    const size_t filter_count, const int bits_per_key, Logger* info_log) {
+  filter_count_ = filter_count;
+  bits_builders_.reserve(filter_count);
+
+  for (size_t i = 0; i < filter_count; ++i) {
+    // TODO determine num_probes
+    LegacyBloomBitsBuilder* bits_builder =
+        new LegacyBloomBitsBuilder(bits_per_key, info_log);
+    bits_builder->hash_id_ = i;
+    bits_builders_.push_back(bits_builder);
+  }
+}
+
+MultiLegacyBloomBitsBuilder::~MultiLegacyBloomBitsBuilder() {
+  for (size_t i = 0; i < bits_builders_.size(); ++i) {
+    delete bits_builders_[i];
+    bits_builders_[i] = nullptr;
+  }
+}
+
+void MultiLegacyBloomBitsBuilder::AddKey(const Slice& key) {
+  for (size_t i = 0; i < bits_builders_.size(); ++i) {
+    bits_builders_[i]->AddKey(key);
+  }
+}
+
+Slice MultiLegacyBloomBitsBuilder::Finish(std::unique_ptr<const char[]>* buf) {
+  buf->reset();
+  fprintf(stderr, "error call MultiLegacyBloomBitsBuilder::Finish(buf)\n");
+  exit(1);
+  return Slice();
+}
+
+Slice MultiLegacyBloomBitsBuilder::Finish(std::unique_ptr<const char[]>* buf,
+                                          int hash_id) {
+  return bits_builders_[hash_id]->Finish(buf);
+}
+
 class LegacyBloomBitsReader : public FilterBitsReader {
  public:
   // init func
@@ -586,6 +654,38 @@ class LegacyBloomBitsReader : public FilterBitsReader {
     }
   }
 
+  // check whether key is in filter array
+  // "contents" contains the data built by a preceding call to
+  // FilterBitsBuilder::Finish. MayMatch must return true if the key was
+  // passed to FilterBitsBuilder::AddKey. This method may return true or false
+  // if the key was not on the list, but it should aim to return false with a
+  // high probability. (WaLSM+)
+  bool MayMatch(const Slice& key, const int hash_id) override {
+    uint32_t hash = BloomHashId(key, hash_id);
+    uint32_t byte_offset;
+    LegacyBloomImpl::PrepareHashMayMatch(
+        hash, num_lines_, data_, /*out*/ &byte_offset, log2_cache_line_size_);
+    return LegacyBloomImpl::HashMayMatchPrepared(
+        hash, num_probes_, data_ + byte_offset, log2_cache_line_size_);
+  }
+
+  // check whether keys is in filter array (WaLSM+)
+  virtual void MayMatch(int num_keys, Slice** keys, bool* may_match, const int hash_id) override {
+    std::array<uint32_t, MultiGetContext::MAX_BATCH_SIZE> hashes;
+    std::array<uint32_t, MultiGetContext::MAX_BATCH_SIZE> byte_offsets;
+    for (int i = 0; i < num_keys; ++i) {
+      hashes[i] = BloomHashId(*keys[i], hash_id);
+      LegacyBloomImpl::PrepareHashMayMatch(hashes[i], num_lines_, data_,
+                                           /*out*/ &byte_offsets[i],
+                                           log2_cache_line_size_);
+    }
+    for (int i = 0; i < num_keys; ++i) {
+      may_match[i] = LegacyBloomImpl::HashMayMatchPrepared(
+          hashes[i], num_probes_, data_ + byte_offsets[i],
+          log2_cache_line_size_);
+    }
+  }
+
  private:
   const char* data_;
   const int num_probes_;
@@ -618,7 +718,7 @@ const std::vector<BloomFilterPolicy::Mode> BloomFilterPolicy::kAllUserModes = {
     kAuto,
 };
 
-// init BloomFilterPolicy, only used for old Block Filter Format, 
+// init BloomFilterPolicy, only used for old Block Filter Format,
 // BloomFilterPolicy not used in our work -- WaLSM and WaLSM+
 BloomFilterPolicy::BloomFilterPolicy(double bits_per_key, Mode mode)
     : mode_(mode), warned_(false), aggregate_rounding_balance_(0) {
@@ -754,15 +854,20 @@ FilterBitsBuilder* BloomFilterPolicy::GetBuilderWithContext(
               "with format_version>=5.",
               whole_bits_per_key_, adjective);
         }
-        return new LegacyBloomBitsBuilder(whole_bits_per_key_,
-                                          context.info_log);
+        // return new LegacyBloomBitsBuilder(whole_bits_per_key_,
+        //                                   context.info_log);
+
+        // TODO: determine filter_count, 
+        // and maybe move this property to some kind of options (WaLSM+)
+        const int filter_count = 10;
+        new MultiLegacyBloomBitsBuilder(filter_count, whole_bits_per_key_, context.info_log);
     }
   }
   assert(false);
   return nullptr;  // something legal
 }
 
-// only return FilterBuilder, 
+// only return FilterBuilder,
 // return LegacyBloomBitsBuilder in our work WaLSM and WaLSM+
 FilterBitsBuilder* BloomFilterPolicy::GetBuilderFromContext(
     const FilterBuildingContext& context) {
