@@ -58,6 +58,8 @@ public:
     uint32_t locate(const std::string& key); // helper func: locate which bucket hitted by this key
 
     const bool& is_ready() { return is_ready_; }
+    std::vector<std::string>& seperators() { return seperators_; }
+    std::vector<Bucket>& buckets() { return buckets_; }
     void sample(const std::string& key, std::vector<std::vector<std::string>>& segments); // before init buckets, we need to sample keys;
     // input segment-related key range (segments), will use them when SamplesPool ready. 
 

@@ -99,3 +99,4 @@ inode_vptrs
 .conda/
 *.txt
 __pycache__/
+*.csv

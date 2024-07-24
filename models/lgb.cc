@@ -71,7 +71,7 @@ void generate_samples() {
 
 void train() {
     PyObject* pModule = PyImport_ImportModule("lgb");
-	if( pModule == NULL ){
+	if( pModule == nullptr ){
 		std::cout <<"module not found" << std::endl;
 		exit(EXIT_FAILURE);
 	}
@@ -87,20 +87,25 @@ void train() {
     PyTuple_SetItem(pArg, 1, Py_BuildValue("s", "lgb.txt")); 
 
     PyObject_CallObject(pFunc, pArg);
+
+    Py_DECREF(pModule);
+    Py_DECREF(pFunc);
+    Py_DECREF(pArg);
 }
 
-int predict() {
-    std::vector<int> sample = {
-        0,1,49438291,178,101302671,106,74108064,43,
-        99152946,172,10416160,118,26960709,191,97761380,
-        185,19964006,44,38331472,49,104932701,123,
-        86047524,51,18605583,69,76772379,158,56142050,175,
-        28037226,81,26597416,197,102537655,177,49169021,
-        159,91967731,145,34006237
+/*
+uint16_t predict_one() {
+    std::vector<uint32_t> sample = {
+        0,77,83853435,86,32896816,164,109999358,88,
+        45036017,191,97761380,192,84780931,40,62674498,
+        71,13928034,187,85729384,85,43033713,95,
+        102396976,93,95867633,185,19964006,154,62021011,21,
+        34288677,161,85558086,181,65248507,162,15193881,
+        136,22547489,99,101097202
     };
 
     PyObject* pModule = PyImport_ImportModule("lgb");
-	if( pModule == NULL ){
+	if( pModule == nullptr ){
 		std::cout <<"module not found" << std::endl;
 		exit(EXIT_FAILURE);
 	}
@@ -124,8 +129,81 @@ int predict() {
 
     int nResult;
     PyArg_Parse(pReturn, "i", &nResult);
+
     // std::cout << "return result is " << nResult << std::endl;
     return nResult;
+}
+*/
+
+void predict(std::vector<uint16_t>& results) {
+    results.clear();
+    std::vector<std::vector<uint32_t>> samples = {
+        {
+            0,77,83853435,86,32896816,164,109999358,88,
+            45036017,191,97761380,192,84780931,40,62674498,
+            71,13928034,187,85729384,85,43033713,95,
+            102396976,93,95867633,185,19964006,154,62021011,21,
+            34288677,161,85558086,181,65248507,162,15193881,
+            136,22547489,99,101097202
+        },
+        {
+            2,113,32610663,147,83265441,100,58249068,136,22547489,
+            166,98995566,141,105010402,99,101097202,146,89779806,
+            102,105025231,21,34288677,49,104932701,126,78444504,25,
+            50094437,48,16975528,1,49438291,191,97761380,31,
+            93911224,107,53195345,129,46866354,111,40745785
+        },
+        {
+            4,125,103500401,33,39603161,64,36666575,75,82095235,182,
+            67943000,42,50022864,96,49843665,148,75656366,18,24160255,
+            57,12002304,110,88600212,185,19964006,8,37777471,16,73571175,
+            26,22979043,153,23490241,104,24766001,100,58249068,
+            137,89347040,69,76772379
+        }
+    };
+
+    PyObject* pModule = PyImport_ImportModule("lgb");
+	if( pModule == nullptr ){
+		std::cout <<"module not found" << std::endl;
+		exit(EXIT_FAILURE);
+	}
+
+    PyObject* pFunc = PyObject_GetAttrString(pModule, "predict");
+	if( !pFunc || !PyCallable_Check(pFunc)){
+		std::cout <<"not found function" << std::endl;
+		exit(EXIT_FAILURE);
+	}
+
+    PyObject* pArg = PyTuple_New(2);
+    PyTuple_SetItem(pArg, 0, Py_BuildValue("s", "lgb.txt")); 
+
+    PyObject* pDatas = PyList_New(0);
+    PyObject* pData = nullptr;
+    size_t cnt = 0;
+    for (std::vector<uint32_t>& sample : samples) {
+        pData = PyList_New(0);
+        for (uint32_t& feature : sample) {
+            PyList_Append(pData, Py_BuildValue("i", feature));
+        }
+        PyList_Append(pDatas, pData);
+        cnt += 1;
+    }
+    
+    PyTuple_SetItem(pArg, 1, pDatas); 
+
+    PyObject* pReturn = PyObject_CallObject(pFunc, pArg); // should return list
+
+    for (size_t i = 0; i < cnt; i ++) {
+        int nResult = 0;
+        PyArg_Parse(PyList_GetItem(pReturn, i), "i", &nResult);
+        results.emplace_back(nResult);
+    }
+    
+    Py_DECREF(pModule);
+    Py_DECREF(pFunc);
+    Py_DECREF(pArg);
+    Py_DECREF(pDatas);
+    Py_DECREF(pReturn);
 }
 
 int main() {
@@ -141,7 +219,12 @@ int main() {
     generate_samples(); 
     train();
 
-    std::cout << "return result is " << predict() << std::endl;
+    std::vector<uint16_t> results;
+    predict(results);
+    for (uint16_t result : results) {
+        std::cout << result << " " << std::endl;
+    }
+    std::cout << std::endl;
 
     Py_Finalize();
 
