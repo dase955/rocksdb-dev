@@ -41,7 +41,9 @@ struct ConfigOptions;
 // A class that takes a bunch of keys, then generates filter
 class FilterBitsBuilder {
  public:
+  #ifdef ART_PLUS
   int filter_count_{1};
+  #endif
   virtual ~FilterBitsBuilder() {}
 
   // Add Key to filter, you could use any way to store the key.
@@ -54,15 +56,17 @@ class FilterBitsBuilder {
   // The ownership of actual data is set to buf
   virtual Slice Finish(std::unique_ptr<const char[]>* buf) = 0;
 
+  #ifdef ART_PLUS
   // Generate the filter using the keys that are added, and the specified hash
   // function id. The return value of this function would be the filter bits, The
-  // ownership of actual data is set to buf
+  // ownership of actual data is set to buf (WaLSM+)
   virtual Slice Finish(std::unique_ptr<const char[]>* buf, const int /* filter_id */) {
     buf->reset();
     fprintf(stderr, "error call FilterBitsBuilder::Finish(buf, filter_id)\n");
     exit(1);
     return Slice();
   }
+  #endif
 
   // Calculate num of keys that can be added and generate a filter
   // <= the specified number of bytes.
@@ -98,6 +102,8 @@ class FilterBitsReader {
       may_match[i] = MayMatch(*keys[i]);
     }
   }
+
+  #ifdef ART_PLUS
   // Check if the entry match the bits in filter using the specified hash function (WaLSM+)
   virtual bool MayMatch(const Slice& /* entry */, const int /* hash_id */) {
     fprintf(stderr, "Error call FilterBitsReader::MayMatch(entry, hash_id)");
@@ -110,6 +116,7 @@ class FilterBitsReader {
     fprintf(stderr, "Error call FilterBitsReader::MayMatch(num_keys, keys, may_match, hash_id)");
     exit(1);
   }
+  #endif
 };
 
 // Contextual information passed to BloomFilterPolicy at filter building time.

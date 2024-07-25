@@ -48,11 +48,19 @@ class PartitionedFilterBlockBuilder : public FullFilterBlockBuilder {
   struct FilterEntry {
     std::string key;
     Slice filter;
+    #ifdef ART_PLUS
     uint32_t segment_id;
+    #endif
   };
+  #ifdef ART_PLUS
   std::vector<std::list<FilterEntry>> filters;  // list of partitioned indexes and their keys
   std::unique_ptr<IndexBuilder> value;
   std::vector<std::vector<std::unique_ptr<const char[]>>> filter_gc;
+  #else
+  std::list<FilterEntry> filters;  // list of partitioned indexes and their keys
+  std::unique_ptr<IndexBuilder> value;
+  std::vector<std::unique_ptr<const char[]>> filter_gc;
+  #endif
   bool finishing_filters =
       false;  // true if Finish is called once but not complete yet.
   // The policy of when cut a filter block and Finish it
@@ -68,11 +76,13 @@ class PartitionedFilterBlockBuilder : public FullFilterBlockBuilder {
   uint32_t keys_added_to_partition_;
   BlockHandle last_encoded_handle_;
 
+  #ifdef ART_PLUS
   // The number of filter builders(hash functions) for each segment. (WaLSM+)
   int filter_count_;
   // When Finish() is called, return filters[filter_index].front() (WaLSM+)
   int finishing_filter_index_;
   static std::atomic<uint32_t> segment_id_base_;
+  #endif
 };
 
 class PartitionedFilterBlockReader : public FilterBlockReaderCommon<Block> {

@@ -207,6 +207,7 @@ class ReverseBytewiseComparatorImpl : public BytewiseComparatorImpl {
 };
 }// namespace
 
+#ifdef ART_PLUS
 // Remove the last 4 bytes of the key to be compared
 // before performing the comparison
 // (WaLSM+)
@@ -256,6 +257,7 @@ class SegmentIdRemovingComparatorImpl : public Comparator {
  private:
   const Comparator* real_comparator;
 };
+#endif
 
 const Comparator* BytewiseComparator() {
   static BytewiseComparatorImpl bytewise;
@@ -267,10 +269,12 @@ const Comparator* ReverseBytewiseComparator() {
   return &rbytewise;
 }
 
+#ifdef ART_PLUS
 std::unique_ptr<Comparator> SegmentIdRemovingComparator(
     const Comparator* real_comparator) {
   return std::unique_ptr<Comparator>(
       new SegmentIdRemovingComparatorImpl(real_comparator));
 }
+#endif
 
 }  // namespace ROCKSDB_NAMESPACE
