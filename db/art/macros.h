@@ -145,7 +145,19 @@ namespace ROCKSDB_NAMESPACE {
 #define DEFAULT_BUCKETS 500
 #define MAGIC_FACTOR 500
 
-// micors for Model Train
+// micros for Model Train
 #define TRAIN_PERIODS 10
+#define MODEL_PATH "/tmp/models/"
+#define MODEL_SUFFIX ".txt"
+#define MODEL_PREFIX "model_"
+#define DATASET_SUFFIX ".csv"
+#define DATASET_PREFIX "dataset_"
+#define SIGNIFICANT_DIGITS 6
+
+// micros for filter cache
+#define DEFAULT_UNITS 5
+#define BITS_PER_KEY 2
+#define MAX_UNITS 10
+#define MIN_UNITS 0
 
 }  // namespace ROCKSDB_NAMESPACE

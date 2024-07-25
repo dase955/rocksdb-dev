@@ -96,3 +96,7 @@ cmake-build-release
 *_example
 inode_vptrs
 .cache/
+.conda/
+*.txt
+__pycache__/
+*.csv
