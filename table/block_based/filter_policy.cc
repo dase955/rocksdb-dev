@@ -569,7 +569,7 @@ class MultiLegacyBloomBitsBuilder : public FilterBitsBuilder {
 
   virtual void AddKey(const Slice& key) override;
   virtual Slice Finish(std::unique_ptr<const char[]>* buf) override;
-  virtual Slice Finish(std::unique_ptr<const char[]>* buf,
+  virtual Slice FinishWithId(std::unique_ptr<const char[]>* buf,
                        const int hash_id) override;
 
  private:
@@ -612,7 +612,7 @@ Slice MultiLegacyBloomBitsBuilder::Finish(std::unique_ptr<const char[]>* buf) {
   return Slice();
 }
 
-Slice MultiLegacyBloomBitsBuilder::Finish(std::unique_ptr<const char[]>* buf,
+Slice MultiLegacyBloomBitsBuilder::FinishWithId(std::unique_ptr<const char[]>* buf,
                                           int hash_id) {
   return bits_builders_[hash_id]->Finish(buf);
 }
@@ -673,7 +673,7 @@ class LegacyBloomBitsReader : public FilterBitsReader {
   // passed to FilterBitsBuilder::AddKey. This method may return true or false
   // if the key was not on the list, but it should aim to return false with a
   // high probability. (WaLSM+)
-  bool MayMatch(const Slice& key, const int hash_id) override {
+  bool MayMatchWithId(const Slice& key, const int hash_id) override {
     uint32_t hash = BloomHashId(key, hash_id);
     uint32_t byte_offset;
     LegacyBloomImpl::PrepareHashMayMatch(
@@ -683,7 +683,7 @@ class LegacyBloomBitsReader : public FilterBitsReader {
   }
 
   // check whether keys is in filter array (WaLSM+)
-  virtual void MayMatch(int num_keys, Slice** keys, bool* may_match, const int hash_id) override {
+  virtual void MayMatchWithId(int num_keys, Slice** keys, bool* may_match, const int hash_id) override {
     std::array<uint32_t, MultiGetContext::MAX_BATCH_SIZE> hashes;
     std::array<uint32_t, MultiGetContext::MAX_BATCH_SIZE> byte_offsets;
     for (int i = 0; i < num_keys; ++i) {

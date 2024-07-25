@@ -201,7 +201,7 @@ bool FullFilterBlockReader::MayMatch(
       filter_block.GetValue()->filter_bits_reader();
 
   if (filter_bits_reader) {
-    if (filter_bits_reader->MayMatch(entry, hash_id)) {
+    if (filter_bits_reader->MayMatchWithId(entry, hash_id)) {
       PERF_COUNTER_ADD(bloom_sst_hit_count, 1);
       return true;
     } else {
@@ -322,7 +322,7 @@ void FullFilterBlockReader::MayMatch(
   }
 
   #ifdef ART_PLUS
-  filter_bits_reader->MayMatch(num_keys, &keys[0], &may_match[0], hash_id);
+  filter_bits_reader->MayMatchWithId(num_keys, &keys[0], &may_match[0], hash_id);
   #else
   filter_bits_reader->MayMatch(num_keys, &keys[0], &may_match[0]);
   #endif
