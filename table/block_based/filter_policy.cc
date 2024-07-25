@@ -384,7 +384,9 @@ class LegacyBloomBitsBuilder : public BuiltinFilterBitsBuilder {
                                             num_probes_);
   }
 
+  #ifdef ART_PLUS
   int hash_id_;
+  #endif
 
  private:
   int bits_per_key_;
@@ -412,7 +414,10 @@ class LegacyBloomBitsBuilder : public BuiltinFilterBitsBuilder {
 
 LegacyBloomBitsBuilder::LegacyBloomBitsBuilder(const int bits_per_key,
                                                Logger* info_log)
-    : hash_id_(0),
+    : 
+      #ifdef ART_PLUS
+      hash_id_(0),
+      #endif
       bits_per_key_(bits_per_key),
       num_probes_(LegacyNoLocalityBloomImpl::ChooseNumProbes(bits_per_key_)),
       info_log_(info_log) {
@@ -422,7 +427,12 @@ LegacyBloomBitsBuilder::LegacyBloomBitsBuilder(const int bits_per_key,
 LegacyBloomBitsBuilder::~LegacyBloomBitsBuilder() {}
 
 void LegacyBloomBitsBuilder::AddKey(const Slice& key) {
+  #ifdef ART_PLUS
   uint32_t hash = BloomHashId(key, hash_id_);
+  #else
+  uint32_t hash = BloomHash(key);
+  #endif
+
   if (hash_entries_.size() == 0 || hash != hash_entries_.back()) {
     hash_entries_.push_back(hash);
   }
@@ -545,6 +555,7 @@ inline void LegacyBloomBitsBuilder::AddHash(uint32_t h, char* data,
                            folly::constexpr_log2(CACHE_LINE_SIZE));
 }
 
+#ifdef ART_PLUS
 class MultiLegacyBloomBitsBuilder : public FilterBitsBuilder {
  public:
   explicit MultiLegacyBloomBitsBuilder(const size_t filter_count,
@@ -605,6 +616,7 @@ Slice MultiLegacyBloomBitsBuilder::Finish(std::unique_ptr<const char[]>* buf,
                                           int hash_id) {
   return bits_builders_[hash_id]->Finish(buf);
 }
+#endif
 
 class LegacyBloomBitsReader : public FilterBitsReader {
  public:
@@ -654,6 +666,7 @@ class LegacyBloomBitsReader : public FilterBitsReader {
     }
   }
 
+  #ifdef ART_PLUS
   // check whether key is in filter array
   // "contents" contains the data built by a preceding call to
   // FilterBitsBuilder::Finish. MayMatch must return true if the key was
@@ -685,6 +698,7 @@ class LegacyBloomBitsReader : public FilterBitsReader {
           log2_cache_line_size_);
     }
   }
+  #endif
 
  private:
   const char* data_;
@@ -854,13 +868,16 @@ FilterBitsBuilder* BloomFilterPolicy::GetBuilderWithContext(
               "with format_version>=5.",
               whole_bits_per_key_, adjective);
         }
-        // return new LegacyBloomBitsBuilder(whole_bits_per_key_,
-        //                                   context.info_log);
-
+        
+        #ifndef ART_PLUS
+        return new LegacyBloomBitsBuilder(whole_bits_per_key_,
+                                          context.info_log);
+        #else
         // TODO: determine filter_count, 
         // and maybe move this property to some kind of options (WaLSM+)
         const int filter_count = 10;
-        new MultiLegacyBloomBitsBuilder(filter_count, whole_bits_per_key_, context.info_log);
+        return new MultiLegacyBloomBitsBuilder(filter_count, whole_bits_per_key_, context.info_log);
+        #endif
     }
   }
   assert(false);
