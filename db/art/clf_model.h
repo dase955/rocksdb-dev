@@ -35,26 +35,23 @@ public:
         feature_num_ = 0;
     }
 
-    // next model file name
-    std::string next_model_name() { return MODEL_PREFIX + std::to_string(model_cnt_) + MODEL_SUFFIX; }
+    // next model file path
+    std::string next_model_path() { return base_dir_ + MODEL_PREFIX + std::to_string(model_cnt_) + MODEL_SUFFIX; }
 
-    // next dataset file name
-    std::string next_dataset_name() { return DATASET_PREFIX + std::to_string(dataset_cnt_) + DATASET_SUFFIX; }
+    // next dataset file path
+    std::string next_dataset_path() { return base_dir_ + DATASET_PREFIX + std::to_string(dataset_cnt_) + DATASET_SUFFIX; }
 
-    // latest model file name
-    std::string latest_model_name() { 
+    // latest model file path
+    std::string latest_model_path() { 
         assert(model_cnt_ > 0);
-        return MODEL_PREFIX + std::to_string(model_cnt_ - 1) + MODEL_SUFFIX;
+        return base_dir_ + MODEL_PREFIX + std::to_string(model_cnt_ - 1) + MODEL_SUFFIX;
     }
 
-    // latest dataset file name
-    std::string latest_dataset_name() { 
+    // latest dataset file path
+    std::string latest_dataset_path() { 
         assert(dataset_cnt_ > 0);
-        return DATASET_PREFIX + std::to_string(dataset_cnt_ - 1) + DATASET_SUFFIX;
+        return base_dir_ + DATASET_PREFIX + std::to_string(dataset_cnt_ - 1) + DATASET_SUFFIX;
     }
-
-    // next dataset file name
-    std::string next_dataset_name() { return DATASET_PREFIX + std::to_string(dataset_cnt_) + DATASET_SUFFIX; }
 
     // check whether ready, only need check feature_nums_ now
     bool is_ready() { return feature_num_ > 0; }
@@ -75,15 +72,20 @@ public:
     }
 
     // resize data point features
-    void prepare_data(std::vector<uint32_t>& data) { data.resize(feature_num_, 0); }
+    void prepare_data(std::vector<uint32_t>& data) { 
+        assert(data.size() >= 3);
+        data.resize(feature_num_, 0); 
+    }
 
     // resize every data point and write to csv file for training
     void write_debug_dataset();
     void write_true_dataset(std::vector<std::vector<uint32_t>>& datas);
     void write_dataset(std::vector<std::vector<uint32_t>>& datas);
 
-    // train 
-    void make_train(std::vector<std::vector<uint32_t>>& datas);
+    // write dataset and train, return model cnt
+    // filter cache caller will check this model cnt and cnt it records, 
+    // if model cnt not equal to caller cnt, it will do update job in filter cache
+    uint16_t make_train(std::vector<std::vector<uint32_t>>& datas);
 
     // predict
     void make_predict(std::vector<std::vector<uint32_t>>& datas, std::vector<uint16_t>& preds);
