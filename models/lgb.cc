@@ -1,5 +1,6 @@
 #include <LightGBM/c_api.h>
 #include <csv2/writer.hpp>
+#include <csv2/reader.hpp>
 #include <LightGBM/boosting.h>
 
 #include <Python.h>
@@ -67,6 +68,26 @@ void generate_samples() {
 
     writer.write_rows(rows);
     stream.close();
+}
+
+void read_samples() {
+    csv2::Reader<csv2::delimiter<','>, 
+                csv2::quote_character<'"'>, 
+                csv2::first_row_is_header<true>,
+                csv2::trim_policy::trim_whitespace> csv;
+               
+    if (csv.mmap("lgb.csv")) {
+        const auto header = csv.header();
+        for (const auto row: csv) {
+            for (const auto cell: row) {
+                std::string value;
+                cell.read_value(value);
+                std::cout << value << " ";
+            }
+            std::cout << std::endl;
+        }
+    }
+
 }
 
 void train() {
@@ -217,6 +238,7 @@ int main() {
 	PyRun_SimpleString("sys.path.append('.')");
 
     generate_samples(); 
+    /*
     train();
 
     std::vector<uint16_t> results;
@@ -225,6 +247,8 @@ int main() {
         std::cout << result << " " << std::endl;
     }
     std::cout << std::endl;
+    */
+    read_samples();
 
     Py_Finalize();
 

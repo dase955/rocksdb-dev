@@ -1,5 +1,7 @@
 #include "clf_model.h"
 #include <csv2/writer.hpp>
+#include <csv2/reader.hpp>
+#include <vector>
 #include <map>
 #include <random>
 #include <chrono>
@@ -55,9 +57,9 @@ void ClfModel::write_debug_dataset() {
         auto seed = std::chrono::system_clock::now().time_since_epoch().count();
         std::shuffle(ids.begin(), ids.end(), std::default_random_engine(seed));
         values.emplace_back(std::to_string(level));
-        for (int i = 0; i < 20; i ++) {
-            values.emplace_back(std::to_string(ids[i]));
-            values.emplace_back(std::to_string(uint32_t(SIGNIFICANT_DIGITS * hotness_map[ids[i]])));
+        for (int j = 0; j < 20; j ++) {
+            values.emplace_back(std::to_string(ids[j]));
+            values.emplace_back(std::to_string(uint32_t(SIGNIFICANT_DIGITS * hotness_map[ids[j]])));
         }
         values.emplace_back(std::to_string(target));
 
@@ -68,7 +70,7 @@ void ClfModel::write_debug_dataset() {
     stream.close();
 }
 
-void ClfModel::write_true_dataset(std::vector<std::vector<uint32_t>>& datas) {
+void ClfModel::write_real_dataset(std::vector<std::vector<uint32_t>>& datas) {
     // ready for writer
     std::ofstream stream(next_dataset_path());
     csv2::Writer<csv2::delimiter<','>> writer(stream);
@@ -87,9 +89,14 @@ void ClfModel::write_true_dataset(std::vector<std::vector<uint32_t>>& datas) {
     header.emplace_back("Target");
     rows.emplace_back(header);
 
+    std::vector<std::string> values;
     for (std::vector<uint32_t>& data : datas) {
         prepare_data(data);
-        rows.emplace_back(data);
+        values.clear();
+        for (uint32_t& value : data) {
+            values.emplace_back(std::to_string(value));
+        }
+        rows.emplace_back(values);
     }
 
     writer.write_rows(rows);
@@ -105,7 +112,7 @@ void ClfModel::write_dataset(std::vector<std::vector<uint32_t>>& datas) {
 
     assert(feature_num_ % 2 != 0); // features num: 2r + 1 
 
-    write_true_dataset(datas);
+    write_real_dataset(datas);
     // dataset_cnt_ += 1;
     return;
 }
@@ -136,12 +143,32 @@ uint16_t ClfModel::make_train(std::vector<std::vector<uint32_t>>& datas) {
     return model_cnt_;
 }
 
-void ClfModel::make_predict(std::vector<std::vector<uint32_t>>& datas, std::vector<uint16_t>& preds) {
-    preds.clear();
-    for (int i = 0; i < datas.size(); i ++) {
-        prepare_data(datas[i]);
-    }
+void ClfModel::make_predict_samples(std::vector<std::vector<uint32_t>>& datas) {
+    csv2::Reader<csv2::delimiter<','>, 
+                csv2::quote_character<'"'>, 
+                csv2::first_row_is_header<true>,
+                csv2::trim_policy::trim_whitespace> csv;
+               
+    if (csv.mmap(latest_dataset_path())) {
+        // const auto header = csv.header();
+        int cnt = 0;
+        for (auto row : csv) {
+            if ((cnt++) > 10) {
+                break;
+            }
 
+            std::vector<uint32_t> data;
+            for (auto cell : row) {
+                std::string value;
+                cell.read_value(value);
+                data.emplace_back(stoul(value));
+            }
+            datas.emplace_back(data);
+        }
+    }
+}
+
+void ClfModel::make_real_predict(std::vector<std::vector<uint32_t>>& datas, std::vector<uint16_t>& preds) {
     PyObject* pModule = PyImport_ImportModule("lgb");
 	assert(pModule == nullptr);
 
@@ -155,6 +182,7 @@ void ClfModel::make_predict(std::vector<std::vector<uint32_t>>& datas, std::vect
     PyObject* pData = nullptr;
     for (std::vector<uint32_t>& data : datas) {
         pData = PyList_New(0);
+        prepare_data(data);
         for (uint32_t& feature : data) {
             PyList_Append(pData, Py_BuildValue("i", feature));
         }
@@ -164,8 +192,9 @@ void ClfModel::make_predict(std::vector<std::vector<uint32_t>>& datas, std::vect
     PyTuple_SetItem(pArg, 1, pDatas); 
 
     PyObject* pReturn = PyObject_CallObject(pFunc, pArg); // should return list
+    assert(pReturn != nullptr);
 
-    for (int i = 0; i < datas.size(); i ++) {
+    for (size_t i = 0; i < datas.size(); i ++) {
         int nResult = 0;
         PyArg_Parse(PyList_GetItem(pReturn, i), "i", &nResult);
         preds.emplace_back(nResult);
@@ -177,6 +206,22 @@ void ClfModel::make_predict(std::vector<std::vector<uint32_t>>& datas, std::vect
     Py_DECREF(pArg);
     Py_DECREF(pDatas);
     Py_DECREF(pReturn);
+}
+
+void ClfModel::make_predict(std::vector<std::vector<uint32_t>>& datas, std::vector<uint16_t>& preds) {
+    preds.clear();
+
+    if (model_cnt_ == 0) {
+        preds.resize(datas.size(), DEFAULT_UNITS);
+        return;
+    }
+
+    if (datas.empty()) {
+        make_predict_samples(datas);
+    } 
+
+    make_real_predict(datas, preds);
+    return;
 }
 
 }

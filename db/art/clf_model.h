@@ -6,6 +6,7 @@
 #include <string>
 #include <Python.h>
 #include <cassert>
+#include <iostream>
 #include "macros.h"
 
 // dataset data point format: 
@@ -58,13 +59,19 @@ public:
 
     // make ready for training, only need init feature_nums_ now
     void make_ready(std::vector<uint16_t>& features_nums) { 
-        feature_num_ = *max_element(features_nums.begin(), features_nums.end()); 
-
         Py_Initialize();
 	    assert(Py_IsInitialized());
 
         PyRun_SimpleString("import sys");
 	    PyRun_SimpleString("sys.path.append('./models')");
+
+        if (features_nums.empty()) {
+            feature_num_ = 41; // debug feature num
+        } else {
+            feature_num_ = *max_element(features_nums.begin(), features_nums.end()); 
+        }
+
+        std::cout << "ClfModel ready, feature_num_: " << feature_num_ << std::endl;
     }
 
     ~ClfModel() {
@@ -79,7 +86,7 @@ public:
 
     // resize every data point and write to csv file for training
     void write_debug_dataset();
-    void write_true_dataset(std::vector<std::vector<uint32_t>>& datas);
+    void write_real_dataset(std::vector<std::vector<uint32_t>>& datas);
     void write_dataset(std::vector<std::vector<uint32_t>>& datas);
 
     // write dataset and train, return model cnt
@@ -88,6 +95,8 @@ public:
     uint16_t make_train(std::vector<std::vector<uint32_t>>& datas);
 
     // predict
+    void make_predict_samples(std::vector<std::vector<uint32_t>>& datas);
+    void make_real_predict(std::vector<std::vector<uint32_t>>& datas, std::vector<uint16_t>& preds);
     void make_predict(std::vector<std::vector<uint32_t>>& datas, std::vector<uint16_t>& preds);
 };
 
