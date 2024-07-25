@@ -147,7 +147,7 @@ namespace ROCKSDB_NAMESPACE {
 
 // micros for Model Train
 #define TRAIN_PERIODS 10
-#define MODEL_PATH "/tmp/models/"
+#define MODEL_PATH "/pg_wal/ycc/"
 #define MODEL_SUFFIX ".txt"
 #define MODEL_PREFIX "model_"
 #define DATASET_SUFFIX ".csv"

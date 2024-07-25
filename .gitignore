@@ -102,3 +102,4 @@ __pycache__/
 *.csv
 
 include/csv2/
+debug.*
