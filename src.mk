@@ -31,6 +31,7 @@ LIB_SOURCES =                                                   \
   db/art/compactor.cc                                           \
   db/art/global_memtable.cc                                     \
   db/art/heat_buckets.cc                                        \
+  db/art/clf_model.cc                                           \
   db/art/heat_group.cc                                          \
   db/art/lock.cc                                                \
   db/art/logger.cc                                              \
