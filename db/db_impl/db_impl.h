@@ -25,6 +25,7 @@
 #include "db/art/global_memtable.h"
 #include "db/art/vlog_manager.h"
 #include "db/art/heat_buckets.h"
+#include "db/art/clf_model.h"
 #include "db/column_family.h"
 #include "db/compaction/compaction_job.h"
 #include "db/dbformat.h"
@@ -1902,6 +1903,8 @@ class DBImpl : public DB {
 #ifdef ART_PLUS
   HeatBuckets heat_buckets_;
 
+  ClfModel clf_model_;
+
   // monitor low-level segments min key and max key
   std::vector<std::vector<std::string>> segments_info_;
 
@@ -1909,7 +1912,9 @@ class DBImpl : public DB {
   uint32_t get_cnt_;
 
   // record period cnt, if period_cnt_ % TRAIN_PERIODS = 0, start to evaluate or retrain model
+  std::mutex train_mutex_;
   uint32_t period_cnt_;
+  uint32_t train_period_;
 #endif
   // Offset of last record written by leader writer.
   uint64_t last_record_offset_;
