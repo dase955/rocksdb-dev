@@ -25,6 +25,7 @@
 #include <utility>
 #include <vector>
 #include <memory>
+#include <fstream>
 
 #include "db/art/timestamp.h"
 #include "db/art/logger.h"
@@ -1770,43 +1771,49 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
   if (heat_buckets_.is_ready() && period_cnt_ > 0 &&  
       period_cnt_ - train_period_ >= TRAIN_PERIODS) {
     train_mutex_.lock();
-    if (period_cnt_ > 0 &&  
-        period_cnt_ - train_period_ >= TRAIN_PERIODS) {
-      std::cout << "[DEBUG] try to train models" << std::endl;
+    if (period_cnt_ - train_period_ >= TRAIN_PERIODS) {
+      std::fstream f_debug;
+      f_debug.open("/pg_wal/ycc/debug.log", std::ios::out | std::ios::app);
+      f_debug << "[DEBUG] try to train models" << std::endl;
+      f_debug << "[DEBUG] period_cnt_ : " << period_cnt_ << std::endl;
+      f_debug << "[DEBUG] train_period_ : " << train_period_ << std::endl;
+      f_debug << "[DEBUG] PERIOD_COUNT : " << PERIOD_COUNT << std::endl;
+      f_debug << "[DEBUG] TRAIN_PERIODS : " << TRAIN_PERIODS << std::endl;
+      f_debug.close();
+      
       train_period_ = period_cnt_;
-      pid_t pid = fork();
-      assert(pid >= 0);
-      if (pid == 0) {
-        if (!clf_model_.is_ready()) {
-          std::vector<uint16_t> feature_nums;
-          clf_model_.make_ready(feature_nums);
-        }
+      // train_period_ already updated
+      // next training will not start so quickly
+      train_mutex_.unlock();
 
-        std::vector<std::vector<uint32_t>> datas;
-        std::vector<uint16_t> preds;
-        std::uint16_t model_cnt;
-
-        model_cnt = clf_model_.make_train(datas);
-
-        clf_model_.make_predict(datas, preds);
-
-        std::cout << "[DEBUG] already train " << model_cnt << "models in period " << train_period_ << std::endl;
-        std::cout << "[DEBUG] predict result: " << std::endl;
-        for (uint16_t pred : preds) {
-          std::cout << pred << " ";
-        }
-        std::cout << std::endl;
-
-        exit(EXIT_SUCCESS);
+      if (!clf_model_.is_ready()) {
+        std::vector<uint16_t> feature_nums;
+        clf_model_.make_ready(feature_nums);
       }
 
-      if (pid == 0) {
-        // if child process dont exit, force to exit.
-        // normally, it will not reach here
-        exit(EXIT_SUCCESS);
+      std::vector<std::vector<uint32_t>> datas;
+      std::vector<uint16_t> preds;
+      std::uint16_t model_cnt;
+
+      model_cnt = clf_model_.make_train(datas);
+
+      clf_model_.make_predict(datas, preds);
+
+      // we can only output to std::cout in main process
+      // so we cannot see anything in child process
+      // these print statements will not work
+      // try to output to tmp file
+        
+      f_debug.open("/pg_wal/ycc/debug.log", std::ios::out | std::ios::app);
+      f_debug << "[DEBUG] already train " << model_cnt << "models in period " << train_period_ << std::endl;
+      f_debug << "[DEBUG] predict result: " << std::endl;
+      for (uint16_t pred : preds) {
+        f_debug << pred << " ";
       }
+      f_debug << std::endl << std::endl << std::endl;
+      f_debug.close();
+        
     }
-    train_mutex_.unlock();
   }
 
 #endif

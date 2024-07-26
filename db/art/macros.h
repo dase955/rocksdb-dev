@@ -141,12 +141,12 @@ namespace ROCKSDB_NAMESPACE {
 #define BUCKETS_ALPHA 0.2
 #define SAMPLES_LIMIT 10000
 #define SAMPLES_MAXCNT 5000000
-#define PERIOD_COUNT 500000
+#define PERIOD_COUNT 50000
 #define DEFAULT_BUCKETS 500
 #define MAGIC_FACTOR 500
 
 // micros for Model Train
-#define TRAIN_PERIODS 20
+#define TRAIN_PERIODS 5
 #define MODEL_PATH "/pg_wal/ycc/"
 #define MODEL_SUFFIX ".txt"
 #define MODEL_PREFIX "model_"
