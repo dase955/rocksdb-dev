@@ -55,9 +55,9 @@ HeatBuckets::~HeatBuckets() {
 }
 
 void HeatBuckets::debug() {
-    std::cout << "[Debug] total cnt in this period: " << current_cnt_ << std::endl;
+    std::cout << "[DEBUG] total cnt in this period: " << current_cnt_ << std::endl;
     for (auto& bucket : buckets_) {
-        std::cout << "[Debug] ";
+        std::cout << "[DEBUG] ";
         std::cout << "bucket hotness : " << bucket.hotness_;
         std::cout << ", bucket hit cnt : " << bucket.hit_cnt_;
         // std::cout << ", bucket keys cnt : " << bucket.keys_cnt();
@@ -270,7 +270,7 @@ uint32_t SamplesPool::determine_k(std::vector<std::vector<std::string>>& segment
         assert(span > 1);
         if (k > span) k = span;
     }
-    // std::cout << "[Debug] samples divided with span k : " << k << std::endl;
+    // std::cout << "[DEBUG] samples divided with span k : " << k << std::endl;
     return k;
 } 
 
@@ -289,10 +289,10 @@ void HeatBuckets::init(std::vector<std::vector<std::string>>& segments) {
     uint32_t k = samples_.determine_k(segments);
     samples_.divide(k, seperators_);
 
-    // std::cout << "[Debug] show key ranges below: " << std::endl;
+    // std::cout << "[DEBUG] show key ranges below: " << std::endl;
     for (size_t i=0; i<seperators_.size()-1; i++) {
         assert(seperators_[i] < seperators_[i+1]);
-        // std::cout << "[Debug] key range " << i+1;
+        // std::cout << "[DEBUG] key range " << i+1;
         // std::cout << ": " << seperators_[i];
         // std::cout << "  --  " << seperators_[i+1];
         // std::cout << std::endl;
@@ -311,7 +311,7 @@ void HeatBuckets::init(std::vector<std::vector<std::string>>& segments) {
     is_ready_ = true;
 
     // debug
-    // std::cout << "[Debug] heat buckets size: " << buckets_.size() << std::endl;
-    std::cout << "[Debug] key ranges init" << std::endl;
+    // std::cout << "[DEBUG] heat buckets size: " << buckets_.size() << std::endl;
+    // std::cout << "[DEBUG] key ranges init" << std::endl;
 }
 }

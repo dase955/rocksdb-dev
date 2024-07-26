@@ -1767,10 +1767,13 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
     }
   }
 
-  if (heat_buckets_.is_ready()) {
+  if (heat_buckets_.is_ready() && period_cnt_ > 0 &&  
+      period_cnt_ - train_period_ >= TRAIN_PERIODS) {
     train_mutex_.lock();
-    if (period_cnt_ > 0 && period_cnt_ % TRAIN_PERIODS == 0 && 
-        period_cnt_ % TRAIN_PERIODS != train_period_ % TRAIN_PERIODS) {
+    if (period_cnt_ > 0 &&  
+        period_cnt_ - train_period_ >= TRAIN_PERIODS) {
+      std::cout << "[DEBUG] try to train models" << std::endl;
+      train_period_ = period_cnt_;
       pid_t pid = fork();
       assert(pid >= 0);
       if (pid == 0) {
@@ -1784,12 +1787,11 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
         std::uint16_t model_cnt;
 
         model_cnt = clf_model_.make_train(datas);
-        train_period_ = period_cnt_;
 
         clf_model_.make_predict(datas, preds);
 
-        std::cout << "already train " << model_cnt << "models in period " << train_period_ << std::endl;
-        std::cout << "predict result: " << std::endl;
+        std::cout << "[DEBUG] already train " << model_cnt << "models in period " << train_period_ << std::endl;
+        std::cout << "[DEBUG] predict result: " << std::endl;
         for (uint16_t pred : preds) {
           std::cout << pred << " ";
         }

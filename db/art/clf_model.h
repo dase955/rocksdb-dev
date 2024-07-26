@@ -63,7 +63,7 @@ public:
 	    assert(Py_IsInitialized());
 
         PyRun_SimpleString("import sys");
-	    PyRun_SimpleString("sys.path.append('./models')");
+	    PyRun_SimpleString("sys.path.append('../models')");
 
         if (features_nums.empty()) {
             feature_num_ = 41; // debug feature num
@@ -71,7 +71,7 @@ public:
             feature_num_ = *max_element(features_nums.begin(), features_nums.end()); 
         }
 
-        std::cout << "ClfModel ready, feature_num_: " << feature_num_ << std::endl;
+        std::cout << "[DEBUG] ClfModel ready, feature_num_: " << feature_num_ << std::endl;
     }
 
     ~ClfModel() {
