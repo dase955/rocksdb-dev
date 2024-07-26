@@ -105,7 +105,7 @@ void PartitionedFilterBlockBuilder::MaybeCutAFilterBlock(
   #ifdef ART_PLUS
   for (int i = 0; i < filter_count_; ++i) {
     filter_gc[i].push_back(std::unique_ptr<const char[]>(nullptr));
-    Slice filter = filter_bits_builder_->Finish(&filter_gc[i].back(), i);
+    Slice filter = filter_bits_builder_->FinishWithId(&filter_gc[i].back(), i);
     std::string& index_key = p_index_builder_->GetPartitionKey();
     filters[i].push_back({index_key, filter, segment_id_base_.fetch_add(1, std::memory_order_relaxed)});
   }
@@ -646,7 +646,7 @@ Slice generate_modified_internal_key(std::unique_ptr<const char[]>& buf, Slice o
   EncodeFixed32R(modified_key_buf, filter_index);
   std::memcpy(modified_key_buf + 4, original_user_key.data(), original_user_key.size());
   EncodeFixed32R(modified_key_buf + 4 + original_user_key.size(), segment_id);
-  std::memcpy(modified_key_buf + 4 + original_user_key.size() + 4, original_user_key.data_, original_user_key.size());
+  std::memcpy(modified_key_buf + 4 + original_user_key.size() + 4, original_internal_bytes.data_, original_internal_bytes.size());
   Slice modified_key = Slice(modified_key_buf, modified_key_buf_size);
 
   buf.reset(modified_key_buf);

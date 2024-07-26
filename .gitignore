@@ -100,4 +100,6 @@ inode_vptrs
 *.txt
 __pycache__/
 *.csv
+
+include/csv2/
 debug.*
