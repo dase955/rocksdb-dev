@@ -29,9 +29,12 @@ class LGBhandler(socketserver.BaseRequestHandler):
                     # send client nothing
                     clf.train(decoded)
                 elif type(decoded) is list: # mean it is pred msg, need to send client predict result
+                    print(decoded)
                     decoded = utils.prepare_data(decoded)
                     # send client target class str (like '0' or '1' or ... )
-                    self.request.send(clf.predict(decoded).encode("utf8"))
+                    result = clf.predict(decoded).encode('UTF-8')
+                    print(clf.predict(decoded))
+                    self.request.send(result)
         except ConnectionResetError:               
             print('one connection close: ' +
                   time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))

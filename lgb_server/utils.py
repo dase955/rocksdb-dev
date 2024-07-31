@@ -2,7 +2,8 @@ from typing import Union
 import pandas as pd
 import sys
 
-dataset_path = '/pg_wal/ycc/'
+# dataset_path = '/pg_wal/ycc/'
+dataset_path = ''
 
 # msg should be like 'dataset1.csv'
 def parse_train_msg(msg: str) -> str:
@@ -32,6 +33,7 @@ def parse_msg(msg: str) -> Union[str, list[int]]:
     assert msg[0] == 't' or msg[0] == 'p'
     assert msg[1] == ' '
     assert msg[2] != ' '
+    print('new message : ' + msg[2:])
     if msg[0] == 't':
         return parse_train_msg(msg[2:])
     elif msg[0] == 'p':

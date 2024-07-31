@@ -238,7 +238,6 @@ int main() {
 	PyRun_SimpleString("sys.path.append('.')");
 
     generate_samples(); 
-    /*
     train();
 
     std::vector<uint16_t> results;
@@ -247,8 +246,7 @@ int main() {
         std::cout << result << " " << std::endl;
     }
     std::cout << std::endl;
-    */
-    read_samples();
+    //read_samples();
 
     Py_Finalize();
 

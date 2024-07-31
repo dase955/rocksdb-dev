@@ -152,7 +152,7 @@ namespace ROCKSDB_NAMESPACE {
 #define MODEL_PREFIX "model_"
 #define DATASET_SUFFIX ".csv"
 #define DATASET_PREFIX "dataset_"
-#define SIGNIFICANT_DIGITS 6
+#define SIGNIFICANT_DIGITS_FACTOR 1e6
 
 // micros for filter cache
 #define DEFAULT_UNITS 5
