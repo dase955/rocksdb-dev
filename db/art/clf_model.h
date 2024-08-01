@@ -4,7 +4,6 @@
 #include <vector>
 #include <algorithm>
 #include <string>
-#include <Python.h>
 #include <cassert>
 #include <iostream>
 #include "macros.h"
