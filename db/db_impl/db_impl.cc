@@ -246,7 +246,6 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname,
 #ifdef ART_PLUS
   get_cnt_ = 0;
   period_cnt_ = 0;
-  train_period_ = 0;
 #endif
   
   // !batch_per_trx_ implies seq_per_batch_ because it is only unset for
@@ -1756,7 +1755,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
 #ifdef ART
   std::string art_key(key.data(), key.size());
 #ifdef ART_PLUS
-  // ready to estimate hotness
+  // ready to estimate hotness, update heat buckets
   if (heat_buckets_.is_ready()) {
     get_cnt_ += 1;
     if (get_cnt_ >= PERIOD_COUNT) {
@@ -1769,51 +1768,34 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
   }
 
   if (heat_buckets_.is_ready() && period_cnt_ > 0 &&  
-      period_cnt_ - train_period_ >= TRAIN_PERIODS) {
-    train_mutex_.lock();
-    if (period_cnt_ - train_period_ >= TRAIN_PERIODS) {
-      std::fstream f_debug;
-      f_debug.open("/pg_wal/ycc/debug.log", std::ios::out | std::ios::app);
-      f_debug << "[DEBUG] try to train models" << std::endl;
-      f_debug << "[DEBUG] period_cnt_ : " << period_cnt_ << std::endl;
-      f_debug << "[DEBUG] train_period_ : " << train_period_ << std::endl;
-      f_debug << "[DEBUG] PERIOD_COUNT : " << PERIOD_COUNT << std::endl;
-      f_debug << "[DEBUG] TRAIN_PERIODS : " << TRAIN_PERIODS << std::endl;
-      f_debug.close();
+      period_cnt_ % TRAIN_PERIODS == 0) {
+    std::fstream f_debug;
+    f_debug.open("/pg_wal/ycc/debug.log", std::ios::out | std::ios::app);
+    f_debug << "[DEBUG] try to train models" << std::endl;
+    f_debug << "[DEBUG] period_cnt_ : " << period_cnt_ << std::endl;
+    f_debug << "[DEBUG] PERIOD_COUNT : " << PERIOD_COUNT << std::endl;
+    f_debug << "[DEBUG] TRAIN_PERIODS : " << TRAIN_PERIODS << std::endl;
       
-      train_period_ = period_cnt_;
-      // train_period_ already updated
-      // next training will not start so quickly
-      train_mutex_.unlock();
-
-      if (!clf_model_.is_ready()) {
-        std::vector<uint16_t> feature_nums;
-        clf_model_.make_ready(feature_nums);
-      }
-
-      std::vector<std::vector<uint32_t>> datas;
-      std::vector<uint16_t> preds;
-      std::uint16_t model_cnt;
-
-      model_cnt = clf_model_.make_train(datas);
-
-      clf_model_.make_predict(datas, preds);
-
-      // we can only output to std::cout in main process
-      // so we cannot see anything in child process
-      // these print statements will not work
-      // try to output to tmp file
-        
-      f_debug.open("/pg_wal/ycc/debug.log", std::ios::out | std::ios::app);
-      f_debug << "[DEBUG] already train " << model_cnt << "models in period " << train_period_ << std::endl;
-      f_debug << "[DEBUG] predict result: " << std::endl;
-      for (uint16_t pred : preds) {
-        f_debug << pred << " ";
-      }
-      f_debug << std::endl << std::endl << std::endl;
-      f_debug.close();
-        
+    if (!clf_model_.is_ready()) {
+      std::vector<uint16_t> feature_nums;
+      clf_model_.make_ready(feature_nums);
     }
+
+    std::vector<std::vector<uint32_t>> datas;
+    std::vector<uint16_t> tags;
+    std::vector<uint16_t> preds;
+
+    clf_model_.make_train(datas, tags);
+
+    clf_model_.make_predict(datas, preds);
+
+    f_debug << "[DEBUG] debug predict result: " << std::endl;
+    for (uint16_t& pred : preds) {
+      f_debug << pred << " ";
+    }
+    f_debug << std::endl << std::endl << std::endl;
+    f_debug.close();
+        
   }
 
 #endif

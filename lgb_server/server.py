@@ -42,7 +42,7 @@ class LGBhandler(socketserver.BaseRequestHandler):
 # server = socketserver.ThreadingTCPServer((host,port), LGBhandler)
 if __name__ == '__main__':
     print('LGBServer start')
-    
+    assert utils.dataset_path == model.model_path
     server = socketserver.ThreadingTCPServer((host,port), LGBhandler)
     server.serve_forever()
     

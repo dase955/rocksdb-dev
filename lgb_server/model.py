@@ -2,7 +2,8 @@ import pandas as pd
 import lightgbm
 import numpy
 
-model_path = ''
+model_path = '/pg_wal/ycc/'
+# model_path = ''
 
 class LGBModel():
     def __init__(self) -> None:

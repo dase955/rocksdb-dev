@@ -117,13 +117,13 @@ int main() {
 
     write_debug_dataset(file);
 
-    libsocket::inet_stream t_sock(host, port, LIBSOCKET_IPv4);
+    libsocket::inet_stream t1_sock(host, port, LIBSOCKET_IPv4);
     std::string msg = "t " + file;
     // already write dataset, send dataset path to server
-    // should not re
-    t_sock << msg;
+    // should not receive any message from server
+    t1_sock << msg;
 
-    // t_sock.shutdown();
+    // t1_sock.shutdown();
 
     std::vector<std::vector<uint32_t>> datas;
     
@@ -153,6 +153,14 @@ int main() {
             std::cout << "receive " << recv.size() <<  " bytes : " << recv << std::endl;
         }
     }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(sleep_time));
+    write_debug_dataset(file);
+    libsocket::inet_stream t2_sock(host, port, LIBSOCKET_IPv4);
+    msg = "t " + file;
+    // already write dataset, send dataset path to server
+    // should not re
+    t2_sock << msg;
 
     return 0;
 }

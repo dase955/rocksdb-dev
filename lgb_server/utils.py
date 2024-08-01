@@ -2,8 +2,8 @@ from typing import Union
 import pandas as pd
 import sys
 
-# dataset_path = '/pg_wal/ycc/'
-dataset_path = ''
+dataset_path = '/pg_wal/ycc/'
+# dataset_path = ''
 
 # msg should be like 'dataset1.csv'
 def parse_train_msg(msg: str) -> str:
