@@ -32,7 +32,7 @@ class LGBModel():
         # we need save clf to txt file, then read this model to init self.__model
         clf.booster_.save_model(model_path + self.__model_name)
         self.__model = lightgbm.Booster(model_file=model_path+self.__model_name)
-        print('load a new model')
+        # print('load a new model')
         
     def predict(self, datas: pd.DataFrame) -> str:
         # currently, only support one data row

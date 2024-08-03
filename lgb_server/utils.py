@@ -33,7 +33,7 @@ def parse_msg(msg: str) -> Union[str, list[int]]:
     assert msg[0] == 't' or msg[0] == 'p'
     assert msg[1] == ' '
     assert msg[2] != ' '
-    print('new message : ' + msg[2:])
+    # print('new message : ' + msg[2:])
     if msg[0] == 't':
         return parse_train_msg(msg[2:])
     elif msg[0] == 'p':

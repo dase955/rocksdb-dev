@@ -55,7 +55,7 @@ public:
             feature_num_ = *max_element(features_nums.begin(), features_nums.end()); 
         }
 
-        std::cout << "[DEBUG] ClfModel ready, feature_num_: " << feature_num_ << std::endl;
+        // std::cout << "[DEBUG] ClfModel ready, feature_num_: " << feature_num_ << std::endl;
     }
 
     ~ClfModel() {

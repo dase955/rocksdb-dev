@@ -1911,8 +1911,14 @@ class DBImpl : public DB {
   // record get cnt in current period, when equal to PERIOD_COUNT, start next period
   uint32_t get_cnt_;
 
-  // record period cnt, if period_cnt_ % TRAIN_PERIODS == 0, start to evaluate or retrain model-
+  // record period cnt, if period_cnt_ - last_train_period_ >= TRAIN_PERIODS, start to evaluate or retrain model-
   uint32_t period_cnt_;
+
+  // record in which period last model trained.
+  uint32_t last_train_period_;
+
+  // train mutex, preventing model trained more than one time
+  std::mutex train_mutex_;
 #endif
   // Offset of last record written by leader writer.
   uint64_t last_record_offset_;

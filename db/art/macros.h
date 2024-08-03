@@ -147,7 +147,7 @@ namespace ROCKSDB_NAMESPACE {
 #define SAMPLES_MAXCNT 5000000 
 // short period get count, if get count equal to or exceed PERIOD_COUNT, 
 // end this short period and start next short period
-#define PERIOD_COUNT 50000 
+#define PERIOD_COUNT 100000 
 // number of heat buckets (number of key ranges, see hotness estimating in the paper)
 #define DEFAULT_BUCKETS 500 
 // magic number in class HeatBuckets
@@ -156,7 +156,7 @@ namespace ROCKSDB_NAMESPACE {
 // micros for Model Train
 
 // long period = TRAIN_PERIODS * short period. if one long period end, evaluate model and retrain model if necessary
-#define TRAIN_PERIODS 5 
+#define TRAIN_PERIODS 10 
 // dataset csv file name
 #define DATASET_NAME "dataset.csv"
 // the path to save model txt file and train dataset csv file
