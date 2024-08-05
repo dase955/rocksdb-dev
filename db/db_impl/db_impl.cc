@@ -1780,12 +1780,12 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
     train_mutex_.unlock();
     // only one thread can train model.
     if (need_train) {
-      std::fstream f_debug;
-      f_debug.open("/pg_wal/ycc/debug.log", std::ios::out | std::ios::app);
-      f_debug << "[DEBUG] try to train models" << std::endl;
-      f_debug << "[DEBUG] period_cnt_ : " << period_cnt_ << std::endl;
-      f_debug << "[DEBUG] PERIOD_COUNT : " << PERIOD_COUNT << std::endl;
-      f_debug << "[DEBUG] TRAIN_PERIODS : " << TRAIN_PERIODS << std::endl;
+      std::fstream f_model;
+      f_model.open("/pg_wal/ycc/model.log", std::ios::out | std::ios::app);
+      f_model << "[DEBUG] try to train models" << std::endl;
+      f_model << "[DEBUG] period_cnt_ : " << period_cnt_ << std::endl;
+      f_model << "[DEBUG] PERIOD_COUNT : " << PERIOD_COUNT << std::endl;
+      f_model << "[DEBUG] TRAIN_PERIODS : " << TRAIN_PERIODS << std::endl;
         
       if (!clf_model_.is_ready()) {
         std::vector<uint16_t> feature_nums;
@@ -1802,12 +1802,24 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
 
       clf_model_.make_predict(datas, preds);
 
-      f_debug << "[DEBUG] debug predict result: " << std::endl;
+      f_model << "[DEBUG] debug predict result: " << std::endl;
       for (uint16_t& pred : preds) {
-        f_debug << pred << " ";
+        f_model << pred << " ";
       }
-      f_debug << std::endl << std::endl << std::endl;
-      f_debug.close();
+      f_model << std::endl << std::endl << std::endl;
+      f_model.close();
+
+      std::fstream f_algo;
+      f_algo.open("/pg_wal/ycc/algo.log", std::ios::out | std::ios::app);
+      f_algo << "[DEBUG] greedy algo debug results : " << std::endl;
+      std::map<uint32_t, uint16_t> algo_solution;
+      uint32_t cache_size = CACHE_SPACE_SIZE;
+      GreedyAlgo greedy_algo;
+      greedy_algo.debug(algo_solution, cache_size);
+      for (auto it = algo_solution.begin(); itr != algo_solution.end(); it++) {
+        f_algo << "[DEBUG] " << it->first << " -> " << it->second << std::endl;
+      }
+      f_algo.close();
     }    
   }
 

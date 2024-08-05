@@ -197,7 +197,7 @@ void ClfModel::make_real_predict(std::vector<std::vector<uint32_t>>& datas, std:
             // only receive pred tag integer
             sock >> recv_buffer;
             uint16_t pred = std::stoul(recv_buffer);
-            assert(pred >= MIN_UNITS && pred <= MAX_UNITS);
+            assert(pred >= MIN_UNITS_NUM && pred <= MAX_UNITS_NUM);
             preds.emplace_back(pred);
         }
     }

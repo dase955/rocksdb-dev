@@ -26,6 +26,7 @@
 #include "db/art/vlog_manager.h"
 #include "db/art/heat_buckets.h"
 #include "db/art/clf_model.h"
+#include "db/art/greedy_algo.h"
 #include "db/column_family.h"
 #include "db/compaction/compaction_job.h"
 #include "db/dbformat.h"
