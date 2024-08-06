@@ -44,7 +44,10 @@ if __name__ == '__main__':
     print('LGBServer start')
     assert utils.dataset_path == model.model_path
     server = socketserver.ThreadingTCPServer((host,port), LGBhandler)
-    server.serve_forever()
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print('\nLGBServer end')
     
     # should not end during benchmark
     # print('LGBServer end')

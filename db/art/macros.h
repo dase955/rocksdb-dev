@@ -147,7 +147,7 @@ namespace ROCKSDB_NAMESPACE {
 #define SAMPLES_MAXCNT 5000000 
 // short period get count, if get count equal to or exceed PERIOD_COUNT, 
 // end this short period and start next short period
-#define PERIOD_COUNT 100000 
+#define PERIOD_COUNT 50000 
 // number of heat buckets (number of key ranges, see hotness estimating in the paper)
 #define DEFAULT_BUCKETS 500 
 // magic number in class HeatBuckets
@@ -188,7 +188,7 @@ namespace ROCKSDB_NAMESPACE {
 #define MAX_UNITS_NUM 10
 // we enable 0 unit for coldest segments
 #define MIN_UNITS_NUM 0
-// default max size of cache space : 8 * 1024 * 1024 * 256 = 2147483648
-#define CACHE_SPACE_SIZE 2147483648
+// default max size of cache space : 8 * 1024 * 1024 * 128 = 1073741824 bit = 128 MB
+#define CACHE_SPACE_SIZE 1073741824
 
 }  // namespace ROCKSDB_NAMESPACE

@@ -14,6 +14,8 @@ struct SegmentAlgoInfo;
 struct SegmentAlgoHelper;
 class GreedyAlgo;
 
+inline double StandardBenefit(const uint32_t& visit_cnt, const uint16_t& units_num);
+inline bool CompareSegmentAlgoHelper(const SegmentAlgoHelper& helper_1, const SegmentAlgoHelper& helper_2);
 
 // contain visit counter of every segment in last long period
 // also contain size of every segment's filter unit
@@ -39,7 +41,7 @@ struct SegmentAlgoHelper {
     SegmentAlgoHelper(const uint32_t& id, const uint32_t& cnt, const uint32_t& size, const uint16_t& units) {
         segment_id = id; visit_cnt = cnt; size_per_unit = size; units_num = units;
         enable_benifit = StandardBenefit(visit_cnt, units_num);
-        assert(units_num <= MAX_UNITS_NUM);
+        // assert(units_num <= MAX_UNITS_NUM);
     }
     SegmentAlgoHelper(const uint32_t& id, SegmentAlgoInfo& segment_algo_info) {
         segment_id = id; visit_cnt = segment_algo_info.visit_cnt; 
@@ -56,9 +58,9 @@ inline double StandardBenefit(const uint32_t& visit_cnt, const uint16_t& units_n
     if (num_probes > 30) num_probes = 30;
         
     // compute false positive rate of one filter unit
-    double rate_per_unit = std::pow(1.0 - std::exp(-num_probes / bits_per_key), num_probes);
+    double rate_per_unit = std::pow(1.0 - std::exp(-double(num_probes) / double(bits_per_key)), num_probes);
 
-    if (units_num >= MAX_UNITS_NUM) {
+    if (units_num >= MAX_UNITS_NUM || visit_cnt <= 0) {
         return 0.0;
     }
 
@@ -67,11 +69,18 @@ inline double StandardBenefit(const uint32_t& visit_cnt, const uint16_t& units_n
     double next_rate = std::pow(rate_per_unit, next_units_num);
 
     double benefit = double(visit_cnt) * (rate - next_rate);
+    /*
+    std::cout << "visit_cnt : " << visit_cnt
+                << " , rate : " << rate
+                << " , next_rate : " << next_rate
+                << " . rate_per_unit : " << rate_per_unit 
+                << std::endl;
+    */
     assert(benefit >= 0);
     return benefit;
 }
 
-bool CompareSegmentAlgoHelper(const SegmentAlgoHelper& helper_1, const SegmentAlgoHelper& helper_2) {
+inline bool CompareSegmentAlgoHelper(const SegmentAlgoHelper& helper_1, const SegmentAlgoHelper& helper_2) {
     return helper_1.enable_benifit < helper_2.enable_benifit;
 }
 
@@ -93,8 +102,11 @@ public:
         segment_algo_infos.clear();
         uint32_t min_segment_id = 0, max_segment_id = 9999;
         for (uint32_t segment_id = min_segment_id; segment_id <= max_segment_id; segment_id++) {
-            SegmentAlgoInfo segment_algo_info(segment_id * 1000, 8 * 1024 * 8); // one unit is 8kb
-            segment_algo_infos[segment_id] = segment_algo_info;
+            // SegmentAlgoInfo segment_algo_info(segment_id * 1000, 8 * 1024 * 8); // one unit is 8kb
+            // segment_algo_infos[segment_id] = SegmentAlgoInfo(segment_id * 1000, 8 * 1024 * 8);
+            // directly use '=' will cause bug, try use std::map.insert
+            segment_algo_infos.insert(std::make_pair(segment_id, 
+                                        SegmentAlgoInfo(segment_id * std::pow(10, (segment_id / 3000) + 1), 8 * 1024 * 2)));  // one unit 2 kb
         }
         assert(segment_algo_infos.size() == max_segment_id + 1);
 

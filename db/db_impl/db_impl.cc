@@ -1816,7 +1816,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
       uint32_t cache_size = CACHE_SPACE_SIZE;
       GreedyAlgo greedy_algo;
       greedy_algo.debug(algo_solution, cache_size);
-      for (auto it = algo_solution.begin(); itr != algo_solution.end(); it++) {
+      for (auto it = algo_solution.begin(); it != algo_solution.end(); it++) {
         f_algo << "[DEBUG] " << it->first << " -> " << it->second << std::endl;
       }
       f_algo.close();
