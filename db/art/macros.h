@@ -190,5 +190,8 @@ namespace ROCKSDB_NAMESPACE {
 #define MIN_UNITS_NUM 0
 // default max size of cache space : 8 * 1024 * 1024 * 128 = 1073741824 bit = 128 MB
 #define CACHE_SPACE_SIZE 1073741824
+// fitler cache helper heap type
+#define BENEFIT_HEAP 0
+#define COST_HEAP 1
 
 }  // namespace ROCKSDB_NAMESPACE

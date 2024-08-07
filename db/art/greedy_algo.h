@@ -80,6 +80,36 @@ inline double StandardBenefit(const uint32_t& visit_cnt, const uint16_t& units_n
     return benefit;
 }
 
+inline double StandardCost(const uint32_t& visit_cnt, const uint16_t& units_num) {
+    int bits_per_key = BITS_PER_KEY_PER_UNIT;
+    // We intentionally round down to reduce probing cost a little bit
+    int num_probes = static_cast<int>(bits_per_key * 0.69);  // 0.69 =~ ln(2)
+    if (num_probes < 1) num_probes = 1;
+    if (num_probes > 30) num_probes = 30;
+        
+    // compute false positive rate of one filter unit
+    double rate_per_unit = std::pow(1.0 - std::exp(-double(num_probes) / double(bits_per_key)), num_probes);
+
+    if (units_num <= MIN_UNITS_NUM || visit_cnt <= 0) {
+        return __DBL_MAX__;
+    }
+
+    uint16_t next_units_num = units_num - 1;
+    double rate = std::pow(rate_per_unit, units_num);
+    double next_rate = std::pow(rate_per_unit, next_units_num);
+
+    double cost = double(visit_cnt) * (next_rate - rate);
+    /*
+    std::cout << "visit_cnt : " << visit_cnt
+                << " , rate : " << rate
+                << " , next_rate : " << next_rate
+                << " . rate_per_unit : " << rate_per_unit 
+                << std::endl;
+    */
+    assert(cost >= 0);
+    return cost;
+}
+
 inline bool CompareSegmentAlgoHelper(const SegmentAlgoHelper& helper_1, const SegmentAlgoHelper& helper_2) {
     return helper_1.enable_benifit < helper_2.enable_benifit;
 }
