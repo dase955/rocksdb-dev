@@ -193,5 +193,8 @@ namespace ROCKSDB_NAMESPACE {
 // fitler cache helper heap type
 #define BENEFIT_HEAP 0
 #define COST_HEAP 1
+#define UNKNOWN_HEAP 2
+// visit cnt update bound
+#define VISIT_CNT_UPDATE_BOUND 100
 
 }  // namespace ROCKSDB_NAMESPACE

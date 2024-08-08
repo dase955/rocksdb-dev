@@ -15,6 +15,7 @@ struct SegmentAlgoHelper;
 class GreedyAlgo;
 
 inline double StandardBenefit(const uint32_t& visit_cnt, const uint16_t& units_num);
+inline double StandardCost(const uint32_t& visit_cnt, const uint16_t& units_num);
 inline bool CompareSegmentAlgoHelper(const SegmentAlgoHelper& helper_1, const SegmentAlgoHelper& helper_2);
 
 // contain visit counter of every segment in last long period
@@ -60,7 +61,7 @@ inline double StandardBenefit(const uint32_t& visit_cnt, const uint16_t& units_n
     // compute false positive rate of one filter unit
     double rate_per_unit = std::pow(1.0 - std::exp(-double(num_probes) / double(bits_per_key)), num_probes);
 
-    if (units_num >= MAX_UNITS_NUM || visit_cnt <= 0) {
+    if (units_num >= MAX_UNITS_NUM) {
         return 0.0;
     }
 
@@ -90,7 +91,7 @@ inline double StandardCost(const uint32_t& visit_cnt, const uint16_t& units_num)
     // compute false positive rate of one filter unit
     double rate_per_unit = std::pow(1.0 - std::exp(-double(num_probes) / double(bits_per_key)), num_probes);
 
-    if (units_num <= MIN_UNITS_NUM || visit_cnt <= 0) {
+    if (units_num <= MIN_UNITS_NUM) {
         return __DBL_MAX__;
     }
 
