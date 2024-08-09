@@ -18,15 +18,25 @@ class FilterCacheHeap;
 class FilterCacheHeapManager;
 inline bool FilterCacheHeapNodeLessComparor(const FilterCacheHeapNode& node_1, const FilterCacheHeapNode& node_2);
 inline bool FilterCacheHeapNodeGreaterComparor(const FilterCacheHeapNode& node_1, const FilterCacheHeapNode& node_2);
+inline double StandardBenefitWithMaxBound(const uint32_t& visit_cnt, const uint16_t& units_num, const uint16_t& max_bound);
+inline double StandardCostWithMinBound(const uint32_t& visit_cnt, const uint16_t& units_num, const uint16_t& min_bound);
 
 struct FilterCacheHeapItem {
     uint32_t segment_id;
     uint32_t approx_visit_cnt; // estimated visit cnt
     uint16_t current_units_num; // enabled units num for this segment
     double benefit_or_cost; // can represent enable benefit or disable cost
+    uint16_t units_num_limit; // units num prediction model predict maximum units num for every segment
     bool is_alive; // sign whether this item still used, if false, that means this segment already merged and freed
-    FilterCacheHeapItem(const uint32_t& id, const uint32_t& cnt, const uint16_t& units, const double& heap_value) {
-        segment_id = id; approx_visit_cnt = cnt; current_units_num = units; benefit_or_cost = heap_value; is_alive = true;
+    FilterCacheHeapItem(const uint32_t& id, const uint32_t& cnt, const uint16_t& units, const double& heap_value, const uint16_t& limit) {
+        segment_id = id; 
+        approx_visit_cnt = cnt; 
+        current_units_num = units; 
+        benefit_or_cost = heap_value; 
+        units_num_limit = limit; 
+        is_alive = true;
+        assert(current_units_num >= MIN_UNITS_NUM);
+        assert(current_units_num <= units_num_limit);
     }
     /*
     FilterCacheHeapItem(const FilterCacheHeapItem& item) {
@@ -34,6 +44,7 @@ struct FilterCacheHeapItem {
         approx_visit_cnt = item.approx_visit_cnt; 
         current_units_num = item.current_units_num; 
         benefit_or_cost = item.benefit_or_cost; 
+        units_num_limit = item.units_num_limit;
         is_alive = item.is_alive;
     }
     */
@@ -54,6 +65,70 @@ inline bool FilterCacheHeapNodeGreaterComparor(const FilterCacheHeapNode& node_1
     return node_1->benefit_or_cost > node_2->benefit_or_cost;
 }
 
+inline double StandardBenefitWithMaxBound(const uint32_t& visit_cnt, const uint16_t& units_num, const uint16_t& max_bound) {
+    int bits_per_key = BITS_PER_KEY_PER_UNIT;
+    // We intentionally round down to reduce probing cost a little bit
+    int num_probes = static_cast<int>(bits_per_key * 0.69);  // 0.69 =~ ln(2)
+    if (num_probes < 1) num_probes = 1;
+    if (num_probes > 30) num_probes = 30;
+        
+    // compute false positive rate of one filter unit
+    double rate_per_unit = std::pow(1.0 - std::exp(-double(num_probes) / double(bits_per_key)), num_probes);
+
+    assert(max_bound >= MIN_UNITS_NUM);
+    assert(max_bound <= MAX_UNITS_NUM);
+    if (units_num >= max_bound) { 
+        return 0.0; // 0.0 is the lowest value of benefit (benefit >= 0.0)
+    }
+
+    uint16_t next_units_num = units_num + 1;
+    double rate = std::pow(rate_per_unit, units_num);
+    double next_rate = std::pow(rate_per_unit, next_units_num);
+
+    double benefit = double(visit_cnt) * (rate - next_rate);
+    /*
+    std::cout << "visit_cnt : " << visit_cnt
+                << " , rate : " << rate
+                << " , next_rate : " << next_rate
+                << " . rate_per_unit : " << rate_per_unit 
+                << std::endl;
+    */
+    assert(benefit >= 0);
+    return benefit;
+}
+
+inline double StandardCostWithMinBound(const uint32_t& visit_cnt, const uint16_t& units_num, const uint16_t& min_bound) {
+    int bits_per_key = BITS_PER_KEY_PER_UNIT;
+    // We intentionally round down to reduce probing cost a little bit
+    int num_probes = static_cast<int>(bits_per_key * 0.69);  // 0.69 =~ ln(2)
+    if (num_probes < 1) num_probes = 1;
+    if (num_probes > 30) num_probes = 30;
+        
+    // compute false positive rate of one filter unit
+    double rate_per_unit = std::pow(1.0 - std::exp(-double(num_probes) / double(bits_per_key)), num_probes);
+
+    assert(min_bound >= MIN_UNITS_NUM);
+    assert(min_bound <= MAX_UNITS_NUM);
+    if (units_num <= min_bound) {
+        return __DBL_MAX__;
+    }
+
+    uint16_t next_units_num = units_num - 1;
+    double rate = std::pow(rate_per_unit, units_num);
+    double next_rate = std::pow(rate_per_unit, next_units_num);
+
+    double cost = double(visit_cnt) * (next_rate - rate);
+    /*
+    std::cout << "visit_cnt : " << visit_cnt
+                << " , rate : " << rate
+                << " , next_rate : " << next_rate
+                << " . rate_per_unit : " << rate_per_unit 
+                << std::endl;
+    */
+    assert(cost >= 0);
+    return cost;
+}
+
 class FilterCacheHeap {
 private:
     int heap_type_;
@@ -72,6 +147,21 @@ public:
 
     void set_type(const int type) {
         heap_type_ = type;
+    }
+
+    // only rebuild heap_, do nothing to heap_index_
+    void rebuild_heap() {
+        // heap_mutex_.lock();
+
+        assert(heap_type_ != UNKNOWN_HEAP);
+        assert(heap_.size() == heap_index_.size());
+        if (heap_type_ == BENEFIT_HEAP) {
+            std::make_heap(heap_.begin(), heap_.end(), FilterCacheHeapNodeLessComparor);
+        } else if (heap_type_ == COST_HEAP) {
+            std::make_heap(heap_.begin(), heap_.end(), FilterCacheHeapNodeGreaterComparor);
+        }
+
+        // heap_mutex_.unlock();
     }
 
     // return heap top
@@ -111,6 +201,7 @@ private:
     // when filter cache call delete, this recorder will automately delete these merged segment ids
     // when filter cache call upsert, this recorder will automately upsert these segment ids
     static std::map<uint32_t, uint32_t> heap_visit_cnt_recorder_;
+    static std::map<uint32_t, uint16_t> units_num_limit_recorder_;
     static std::mutex manager_mutex_; 
 
 public:
@@ -118,7 +209,13 @@ public:
         benefit_heap_.set_type(BENEFIT_HEAP);
         cost_heap_.set_type(COST_HEAP);
         heap_visit_cnt_recorder_.clear();
+        units_num_limit_recorder_.clear();
     }
+
+    // sync units_num_limit in heap and recorder
+    // reminded that we will not insert or delete nodes in this method
+    // we only update these nodes that already exist in two heaps
+    void sync_units_num_limit(std::map<uint32_t, uint16_t>& current_units_num_limit_recorder);
 
     // sync visit cnt in heap and real estimated visit cnt
     // reminded that we will not insert or delete nodes in this method
@@ -139,7 +236,5 @@ public:
     // because we need to keep heap visit cnt and recorder visit cnt the same
     void batch_upsert(std::vector<FilterCacheHeapItem>& items);
 };
-
-// TODO: every segment have max units num k, not MAX_UNITS_NUM, fix it
 
 }

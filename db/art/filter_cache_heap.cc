@@ -6,6 +6,7 @@ namespace ROCKSDB_NAMESPACE {
 FilterCacheHeap FilterCacheHeapManager::benefit_heap_;
 FilterCacheHeap FilterCacheHeapManager::cost_heap_;
 std::map<uint32_t, uint32_t> FilterCacheHeapManager::heap_visit_cnt_recorder_;
+std::map<uint32_t, uint16_t> FilterCacheHeapManager::units_num_limit_recorder_;
 std::mutex FilterCacheHeapManager::manager_mutex_; 
 
 FilterCacheHeapNode FilterCacheHeap::heap_top() {
@@ -128,14 +129,9 @@ void FilterCacheHeap::batch_upsert(std::vector<FilterCacheHeapNode>& nodes) {
             heap_.emplace_back(node); // push into heap_
         }
     }
+
     // update or insert done, need to rebuild heap_
-    assert(heap_type_ != UNKNOWN_HEAP);
-    if (heap_type_ == BENEFIT_HEAP) {
-        std::make_heap(heap_.begin(), heap_.end(), FilterCacheHeapNodeLessComparor);
-    } else if (heap_type_ == COST_HEAP) {
-        std::make_heap(heap_.begin(), heap_.end(), FilterCacheHeapNodeGreaterComparor);
-    }
-    assert(heap_.size() == heap_index_.size());
+    rebuild_heap();
 
     // heap_mutex_.unlock();
 }
@@ -176,12 +172,7 @@ void FilterCacheHeap::batch_delete(std::vector<uint32_t>& segment_ids) {
     }
 
     // delete done, need to rebuild heap_
-    assert(heap_type_ != UNKNOWN_HEAP);
-    if (heap_type_ == BENEFIT_HEAP) {
-        std::make_heap(heap_.begin(), heap_.end(), FilterCacheHeapNodeLessComparor);
-    } else if (heap_type_ == COST_HEAP) {
-        std::make_heap(heap_.begin(), heap_.end(), FilterCacheHeapNodeGreaterComparor);
-    }
+    rebuild_heap();
 
     // heap_mutex_.unlock();
 }
@@ -190,9 +181,13 @@ void FilterCacheHeapManager::batch_delete(std::vector<uint32_t>& segment_ids) {
     manager_mutex_.lock();
 
     for (uint32_t& segment_id : segment_ids) {
-        auto it = heap_visit_cnt_recorder_.find(segment_id);
-        if (it != heap_visit_cnt_recorder_.end()) {
+        auto cnt_it = heap_visit_cnt_recorder_.find(segment_id);
+        auto limit_it = units_num_limit_recorder_.find(segment_id);
+        if (cnt_it != heap_visit_cnt_recorder_.end()) {
             heap_visit_cnt_recorder_.erase(segment_id);
+        }
+        if (limit_it != units_num_limit_recorder_.end()) {
+            units_num_limit_recorder_.erase(segment_id);
         }
     }
 
@@ -207,39 +202,67 @@ void FilterCacheHeapManager::batch_upsert(std::vector<FilterCacheHeapItem>& item
 
     std::vector<FilterCacheHeapNode> benefit_nodes, cost_nodes;
     for (FilterCacheHeapItem& item : items) {
-        double benefit = StandardBenefit(item.approx_visit_cnt, item.current_units_num);
-        double cost = StandardCost(item.approx_visit_cnt, item.current_units_num);
+        assert(item.current_units_num >= MIN_UNITS_NUM);
+        assert(item.current_units_num <= item.units_num_limit);
+        double benefit = StandardBenefitWithMaxBound(item.approx_visit_cnt, item.current_units_num, item.units_num_limit);
+        double cost = StandardCostWithMinBound(item.approx_visit_cnt, item.current_units_num, MIN_UNITS_NUM);
         // item meets at least one conditions
         // so that item always upsert into heap
         // if item.approx_visit_cnt = 0, still push into heap
         // we may modify its visit cnt in heap later
+        /*
         if (item.current_units_num > MIN_UNITS_NUM) {
             // make ready to upsert cost nodes
-            // FilterCacheHeapItem(const uint32_t& id, const uint32_t& cnt, const uint16_t& units, const double& heap_value)
-            FilterCacheHeapNode node = new FilterCacheHeapItem(item.segment_id,
-                                                                item.approx_visit_cnt,
-                                                                item.current_units_num,
-                                                                cost);
-            cost_nodes.emplace_back(node);
+            // FilterCacheHeapItem(const uint32_t& id, const uint32_t& cnt, const uint16_t& units, const double& heap_value, const uint16_t& limit)
+            cost_nodes.emplace_back(new FilterCacheHeapItem(item.segment_id,
+                                                            item.approx_visit_cnt,
+                                                            item.current_units_num,
+                                                            cost,
+                                                            item.units_num_limit)
+                                    );
         }
-        if (item.current_units_num < MAX_UNITS_NUM) {
+        if (item.current_units_num < item.units_num_limit) {
             // make ready to upsert benefit nodes
-            // FilterCacheHeapItem(const uint32_t& id, const uint32_t& cnt, const uint16_t& units, const double& heap_value)
-            FilterCacheHeapNode node = new FilterCacheHeapItem(item.segment_id,
+            // FilterCacheHeapItem(const uint32_t& id, const uint32_t& cnt, const uint16_t& units, const double& heap_value, const uint16_t& limit)
+            benefit_nodes.emplace_back(new FilterCacheHeapItem(item.segment_id,
                                                                 item.approx_visit_cnt,
                                                                 item.current_units_num,
-                                                                benefit);
-            benefit_nodes.emplace_back(node);
+                                                                benefit,
+                                                                item.units_num_limit)
+                                        );
         }
-        
+        */
+
+        if (item.current_units_num >= MIN_UNITS_NUM && item.current_units_num <= item.units_num_limit) {
+            cost_nodes.emplace_back(new FilterCacheHeapItem(item.segment_id,
+                                                            item.approx_visit_cnt,
+                                                            item.current_units_num,
+                                                            cost,
+                                                            item.units_num_limit)
+                                    );
+            benefit_nodes.emplace_back(new FilterCacheHeapItem(item.segment_id,
+                                                                item.approx_visit_cnt,
+                                                                item.current_units_num,
+                                                                benefit,
+                                                                item.units_num_limit)
+                                        );
+        }
+
         // update visit cnt, we need to keep recorder visit cnt and heap visit cnt the same
         const uint32_t segment_id = item.segment_id;
         const uint32_t visit_cnt = item.approx_visit_cnt;
-        auto it = heap_visit_cnt_recorder_.find(segment_id);
-        if (it != heap_visit_cnt_recorder_.end()) {
-            it->second = visit_cnt;
+        const uint16_t units_limit = item.units_num_limit;
+        auto cnt_it = heap_visit_cnt_recorder_.find(segment_id);
+        auto limit_it = units_num_limit_recorder_.find(segment_id);
+        if (cnt_it != heap_visit_cnt_recorder_.end()) {
+            cnt_it->second = visit_cnt;
         } else {
             heap_visit_cnt_recorder_.insert(std::make_pair(segment_id, visit_cnt));
+        }
+        if (limit_it != units_num_limit_recorder_.end()) {
+            limit_it->second = units_limit;
+        } else {
+            units_num_limit_recorder_.insert(std::make_pair(segment_id, units_limit));
         }
     }
 
@@ -282,13 +305,15 @@ bool FilterCacheHeapManager::try_modify(FilterCacheModifyResult& result) {
     // so we need to upsert new nodes of these two segments into benefit heap and cost heap
     std::vector<FilterCacheHeapNode> new_benefit_nodes, new_cost_nodes;
 
-    if (benefit_node->current_units_num + 1 < MAX_UNITS_NUM) { 
+    /*
+    if (benefit_node->current_units_num + 1 < benefit_node->units_num_limit) { 
         new_benefit_nodes.emplace_back(new FilterCacheHeapItem(benefit_node->segment_id,
                                                                 benefit_node->approx_visit_cnt,
                                                                 benefit_node->current_units_num + 1,
                                                                 StandardBenefit(benefit_node->approx_visit_cnt,
                                                                                 benefit_node->current_units_num + 1
-                                                                                )
+                                                                                ),
+                                                                benefit_node->units_num_limit
                                                                 )
                                         );
     }
@@ -298,7 +323,8 @@ bool FilterCacheHeapManager::try_modify(FilterCacheModifyResult& result) {
                                                         benefit_node->current_units_num + 1,
                                                         StandardCost(benefit_node->approx_visit_cnt,
                                                                      benefit_node->current_units_num + 1
-                                                                    )
+                                                                     ),
+                                                        benefit_node->units_num_limit
                                                         )
                                 );
     
@@ -308,7 +334,8 @@ bool FilterCacheHeapManager::try_modify(FilterCacheModifyResult& result) {
                                                             cost_node->current_units_num - 1,
                                                             StandardCost(cost_node->approx_visit_cnt,
                                                                          cost_node->current_units_num - 1
-                                                                        )
+                                                                        ),
+                                                            cost_node->units_num_limit
                                                             )
                                     );
     }
@@ -318,10 +345,54 @@ bool FilterCacheHeapManager::try_modify(FilterCacheModifyResult& result) {
                                                            cost_node->current_units_num - 1,
                                                            StandardBenefit(cost_node->approx_visit_cnt,
                                                                            cost_node->current_units_num - 1
-                                                                            )
+                                                                            ),
+                                                           cost_node->units_num_limit
                                                             )
                                     );
-    
+    */
+    // we set benefit of nodes (units num == units num limit) to 0.0
+    // and cost of nodes (units num == 0) to Infinite
+    // these prevent modifying these nodes' units num
+    // so we dont need to check units num
+    new_benefit_nodes.emplace_back(new FilterCacheHeapItem(benefit_node->segment_id,
+                                                            benefit_node->approx_visit_cnt,
+                                                            benefit_node->current_units_num + 1,
+                                                            StandardBenefitWithMaxBound(benefit_node->approx_visit_cnt,
+                                                                                        benefit_node->current_units_num + 1,
+                                                                                        benefit_node->units_num_limit
+                                                                                        ),
+                                                            benefit_node->units_num_limit
+                                                            )
+                                    );
+    new_cost_nodes.emplace_back(new FilterCacheHeapItem(benefit_node->segment_id,
+                                                        benefit_node->approx_visit_cnt,
+                                                        benefit_node->current_units_num + 1,
+                                                        StandardCostWithMinBound(benefit_node->approx_visit_cnt,
+                                                                                 benefit_node->current_units_num + 1,
+                                                                                 MIN_UNITS_NUM
+                                                                                 ),
+                                                        benefit_node->units_num_limit
+                                                        )
+                                );
+    new_cost_nodes.emplace_back(new FilterCacheHeapItem(cost_node->segment_id,
+                                                        cost_node->approx_visit_cnt,
+                                                        cost_node->current_units_num - 1,
+                                                        StandardCostWithMinBound(cost_node->approx_visit_cnt,
+                                                                                 cost_node->current_units_num - 1,
+                                                                                 MIN_UNITS_NUM),
+                                                        cost_node->units_num_limit
+                                                        )
+                                );
+    new_benefit_nodes.emplace_back(new FilterCacheHeapItem(cost_node->segment_id,
+                                                           cost_node->approx_visit_cnt,
+                                                           cost_node->current_units_num - 1,
+                                                           StandardBenefitWithMaxBound(cost_node->approx_visit_cnt,
+                                                                                       cost_node->current_units_num - 1,
+                                                                                       cost_node->units_num_limit
+                                                                                       ),
+                                                           cost_node->units_num_limit
+                                                            )
+                                    );
     // already make ready for upsert
     benefit_heap_.batch_upsert(new_benefit_nodes);
     cost_heap_.batch_upsert(new_cost_nodes);
@@ -344,7 +415,6 @@ void FilterCacheHeapManager::sync_visit_cnt(std::map<uint32_t, uint32_t>& curren
 
     std::vector<FilterCacheHeapNode> sync_nodes;
     std::vector<uint32_t> sync_segment_ids;
-    std::vector<uint32_t> sync_visit_cnts;
 
     auto heap_it = heap_visit_cnt_recorder_.begin();
     auto current_it = current_visit_cnt_recorder.begin();
@@ -356,22 +426,118 @@ void FilterCacheHeapManager::sync_visit_cnt(std::map<uint32_t, uint32_t>& curren
             current_it ++;
         } else { 
             // heap_it->first == current_it->first
+            assert(heap_it->first == current_it->first);
             int64_t old_visit_cnt = heap_it->second;
             int64_t cur_visit_cnt = current_it->second;
             if (std::abs(cur_visit_cnt-old_visit_cnt) > VISIT_CNT_UPDATE_BOUND) {
+                heap_it->second = current_it->second; // remember to update heap visit cnt recorder
                 sync_segment_ids.emplace_back(current_it->first);
-                sync_visit_cnts.emplace_back(current_it->second);
             }
             // heap_it ++;
             current_it ++;
         }
     }
 
-    // TODO: query nodes in heap, then update visit cnt and benefit/cost in these nodes, finally upsert these nodes into heaps
+    // query nodes in heap
+    std::vector<FilterCacheHeapNode> sync_benefit_nodes, sync_cost_nodes;
+    benefit_heap_.batch_query(sync_segment_ids, sync_benefit_nodes);
+    cost_heap_.batch_query(sync_segment_ids, sync_cost_nodes);
+
+    // update visit cnt and benefit/cost in these nodes 
+    for (FilterCacheHeapNode& sync_benefit_node : sync_benefit_nodes) {
+        if (sync_benefit_node != nullptr) {
+            sync_benefit_node->approx_visit_cnt = current_visit_cnt_recorder[sync_benefit_node->segment_id];
+            sync_benefit_node->benefit_or_cost = StandardBenefitWithMaxBound(sync_benefit_node->approx_visit_cnt,
+                                                                             sync_benefit_node->current_units_num,
+                                                                             sync_benefit_node->units_num_limit);
+        }
+    }
+    for (FilterCacheHeapNode& sync_cost_node : sync_cost_nodes) {
+        if (sync_cost_node != nullptr) {
+            sync_cost_node->approx_visit_cnt = current_visit_cnt_recorder[sync_cost_node->segment_id];
+            sync_cost_node->benefit_or_cost = StandardCostWithMinBound(sync_cost_node->approx_visit_cnt,
+                                                                       sync_cost_node->current_units_num,
+                                                                       MIN_UNITS_NUM);
+        }
+    }
+
+    // upsert nodes into benefit heap and cost heap
+    // benefit_heap_.batch_upsert(sync_benefit_nodes);
+    // cost_heap_.batch_upsert(sync_cost_nodes);
+
     
-    // TODO: notice that we already updated these nodes in heap, we only need to rebuild heap
-    // TODO: but heap.upsert include the step of checking whether these segments already in heap
-    // TODO: this will waste some time, can we rebuild heap directly?
+    // notice that we already updated these nodes in heap, we only need to rebuild heap
+    // but heap.upsert include the step of checking whether these segments already in heap
+    // this will waste some time, can we rebuild heap directly?
+    benefit_heap_.rebuild_heap();
+    cost_heap_.rebuild_heap();
+
+    manager_mutex_.unlock();
+}
+
+void FilterCacheHeapManager::sync_units_num_limit(std::map<uint32_t, uint16_t>& current_units_num_limit_recorder) {
+    manager_mutex_.lock();
+
+    std::vector<FilterCacheHeapNode> sync_nodes;
+    std::vector<uint32_t> sync_segment_ids;
+
+    auto origin_it = units_num_limit_recorder_.begin();
+    auto current_it = current_units_num_limit_recorder.begin();
+    while (origin_it != units_num_limit_recorder_.end() &&
+            current_it != current_units_num_limit_recorder.end()) {
+        if (origin_it->first < current_it->first) {
+            origin_it ++;
+        } else if (origin_it->first > current_it->first) {
+            current_it ++;
+        } else { 
+            // origin_it->first == current_it->first
+            assert(origin_it->first == current_it->first);
+            assert(current_it->second <= MAX_UNITS_NUM);
+            if (origin_it->second != current_it->second) {
+                origin_it->second = current_it->second;
+                sync_segment_ids.emplace_back(current_it->first);
+            }
+            current_it ++;
+        }
+    }
+
+    // query nodes in heap
+    std::vector<FilterCacheHeapNode> sync_benefit_nodes, sync_cost_nodes;
+    benefit_heap_.batch_query(sync_segment_ids, sync_benefit_nodes);
+    cost_heap_.batch_query(sync_segment_ids, sync_cost_nodes);
+
+    // update units num limit, units num and benefit/cost in these nodes 
+    for (FilterCacheHeapNode& sync_benefit_node : sync_benefit_nodes) {
+        if (sync_benefit_node != nullptr) {
+            sync_benefit_node->units_num_limit = current_units_num_limit_recorder[sync_benefit_node->segment_id];
+            sync_benefit_node->current_units_num = std::min(sync_benefit_node->units_num_limit,
+                                                            sync_benefit_node->current_units_num);
+            sync_benefit_node->benefit_or_cost = StandardBenefitWithMaxBound(sync_benefit_node->approx_visit_cnt,
+                                                                             sync_benefit_node->current_units_num,
+                                                                             sync_benefit_node->units_num_limit);
+        }
+    }
+    for (FilterCacheHeapNode& sync_cost_node : sync_cost_nodes) {
+        if (sync_cost_node != nullptr) {
+            sync_cost_node->units_num_limit = current_units_num_limit_recorder[sync_cost_node->segment_id];
+            sync_cost_node->current_units_num = std::min(sync_cost_node->units_num_limit,
+                                                         sync_cost_node->current_units_num);
+            sync_cost_node->benefit_or_cost = StandardCostWithMinBound(sync_cost_node->approx_visit_cnt,
+                                                                        sync_cost_node->current_units_num,
+                                                                        MIN_UNITS_NUM);
+        }
+    }
+
+    // upsert nodes into benefit heap and cost heap
+    // benefit_heap_.batch_upsert(sync_benefit_nodes);
+    // cost_heap_.batch_upsert(sync_cost_nodes);
+
+    
+    // notice that we already updated these nodes in heap, we only need to rebuild heap
+    // but heap.upsert include the step of checking whether these segments already in heap
+    // this will waste some time, can we rebuild heap directly?
+    benefit_heap_.rebuild_heap();
+    cost_heap_.rebuild_heap();
 
     manager_mutex_.unlock();
 }
