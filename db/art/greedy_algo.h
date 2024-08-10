@@ -137,7 +137,7 @@ public:
             // segment_algo_infos[segment_id] = SegmentAlgoInfo(segment_id * 1000, 8 * 1024 * 8);
             // directly use '=' will cause bug, try use std::map.insert
             segment_algo_infos.insert(std::make_pair(segment_id, 
-                                        SegmentAlgoInfo(segment_id * std::pow(10, (segment_id / 3000) + 1), 8 * 1024 * 2)));  // one unit 2 kb
+                                        SegmentAlgoInfo(segment_id * std::pow(10, (segment_id / 3000) + 1), 8 * 1024 * 4)));  // one unit 2 kb
         }
         assert(segment_algo_infos.size() == max_segment_id + 1);
 

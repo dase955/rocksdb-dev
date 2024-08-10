@@ -183,9 +183,9 @@ namespace ROCKSDB_NAMESPACE {
 // bits-per-key for every filter unit of every segment, 
 // found default bits-per-key = DEFAULT_UNITS_NUM * BITS_PER_KEY_PER_UNIT = 10
 // equal to primary value of paper benchmark config value
-#define BITS_PER_KEY_PER_UNIT 2
+#define BITS_PER_KEY_PER_UNIT 4
 // max unit nums for every segment, we only generate MAX_UNITS_NUM units for every segment
-#define MAX_UNITS_NUM 10
+#define MAX_UNITS_NUM 6
 // we enable 0 unit for coldest segments
 #define MIN_UNITS_NUM 0
 // default max size of cache space : 8 * 1024 * 1024 * 128 = 1073741824 bit = 128 MB
