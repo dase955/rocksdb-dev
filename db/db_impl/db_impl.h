@@ -26,6 +26,7 @@
 #include "db/art/vlog_manager.h"
 #include "db/art/heat_buckets.h"
 #include "db/art/clf_model.h"
+#include "db/art/filter_cache_heap.h"
 #include "db/art/greedy_algo.h"
 #include "db/column_family.h"
 #include "db/compaction/compaction_job.h"
@@ -1905,6 +1906,8 @@ class DBImpl : public DB {
   HeatBuckets heat_buckets_;
 
   ClfModel clf_model_;
+
+  FilterCacheHeapManager filter_cache_heap_manager_;
 
   // monitor low-level segments min key and max key
   std::vector<std::vector<std::string>> segments_info_;

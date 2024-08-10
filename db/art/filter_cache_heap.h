@@ -28,6 +28,7 @@ struct FilterCacheHeapItem {
     double benefit_or_cost; // can represent enable benefit or disable cost
     uint16_t units_num_limit; // units num prediction model predict maximum units num for every segment
     bool is_alive; // sign whether this item still used, if false, that means this segment already merged and freed
+    // default set heap_value = 0, we will compuate benefit or cost in batch upsert func
     FilterCacheHeapItem(const uint32_t& id, const uint32_t& cnt, const uint16_t& units, const double& heap_value, const uint16_t& limit) {
         segment_id = id; 
         approx_visit_cnt = cnt; 
@@ -188,6 +189,18 @@ public:
     // only support batch delete, if one node not exist in heap_index_, it must not exist in heap
     // so we only need to delete these existing nodes
     void batch_delete(std::vector<uint32_t>& segment_ids);
+
+    // only used in debug !!!
+    void heap_index(std::map<uint32_t, FilterCacheHeapNode>& heap_index) {
+        heap_index.clear();
+        heap_index.insert(heap_index_.begin(), heap_index_.end());
+    }
+
+    // only used in debug !!!
+    void heap(std::vector<FilterCacheHeapNode>& heap) {
+        heap.clear();
+        heap.assign(heap_.begin(), heap_.end());
+    }
 };
 
 class FilterCacheHeapManager {
@@ -235,6 +248,10 @@ public:
     // reminded that we will also update heap_visit_cnt_recorder_ if we update a existed node
     // because we need to keep heap visit cnt and recorder visit cnt the same
     void batch_upsert(std::vector<FilterCacheHeapItem>& items);
+
+    // 1. try debug batch insert
+    // 2. try debug batch update(use batch_upsert)
+    void debug();
 };
 
 }

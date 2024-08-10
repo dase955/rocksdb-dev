@@ -1820,6 +1820,8 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
         f_algo << "[DEBUG] " << it->first << " -> " << it->second << std::endl;
       }
       f_algo.close();
+
+      filter_cache_heap_manager_.debug();
     }    
   }
 

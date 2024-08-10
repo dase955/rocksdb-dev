@@ -1,5 +1,6 @@
 #include "filter_cache_heap.h"
-#include "greedy_algo.h"
+#include <fstream>
+#include <iostream>
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -540,6 +541,70 @@ void FilterCacheHeapManager::sync_units_num_limit(std::map<uint32_t, uint16_t>& 
     cost_heap_.rebuild_heap();
 
     manager_mutex_.unlock();
+}
+
+void FilterCacheHeapManager::debug() {
+    std::vector<FilterCacheHeapItem> items;
+    std::map<uint32_t, FilterCacheHeapNode> b_heap_index;
+    std::vector<FilterCacheHeapNode> b_heap;
+    std::map<uint32_t, FilterCacheHeapNode> c_heap_index;
+    std::vector<FilterCacheHeapNode> c_heap;
+    std::fstream f_heap;
+    f_heap.open("/pg_wal/ycc/heap.log", std::ios::out | std::ios::app);
+    // FilterCacheHeapItem(const uint32_t& id, const uint32_t& cnt, const uint16_t& units,
+    //                     const double& heap_value, const uint16_t& limit)
+    // 1. try to insert some new data
+    f_heap << "[DEBUG] debug step 1 : batch insert" << std::endl << std::endl;
+    for (uint32_t id = 0; id < 70; id++) {
+        items.emplace_back(id % 70, (id % 70) * 10, (id % 70) / 10, 0, MAX_UNITS_NUM);
+    }
+    batch_upsert(items);
+    benefit_heap_.heap_index(b_heap_index);
+    benefit_heap_.heap(b_heap);
+    cost_heap_.heap_index(c_heap_index);
+    cost_heap_.heap(c_heap);
+    f_heap << "[DEBUG] step1 b_heap_index : " << std::endl;
+    for (auto it = b_heap_index.begin(); it != b_heap_index.end(); it++) {
+        FilterCacheHeapNode node = it->second;
+        f_heap << it->first << " -> ";
+        f_heap << " id : " << node->segment_id;
+        f_heap << " , cnt : " << node->approx_visit_cnt;
+        f_heap << " , units : " << node->current_units_num;
+        f_heap << " , value : " << node->benefit_or_cost;
+        f_heap << " , limit : " << node->units_num_limit;
+        f_heap << " , alive : " << node->is_alive << std::endl;
+    }
+    f_heap << "[DEBUG] step1 b_heap : " << std::endl;
+    for (FilterCacheHeapNode& node : b_heap) {
+        f_heap << " id : " << node->segment_id;
+        f_heap << " , cnt : " << node->approx_visit_cnt;
+        f_heap << " , units : " << node->current_units_num;
+        f_heap << " , value : " << node->benefit_or_cost;
+        f_heap << " , limit : " << node->units_num_limit;
+        f_heap << " , alive : " << node->is_alive << std::endl;
+    }
+    f_heap << "[DEBUG] step1 c_heap_index : " << std::endl;
+    for (auto it = c_heap_index.begin(); it != c_heap_index.end(); it++) {
+        FilterCacheHeapNode node = it->second;
+        f_heap << it->first << " -> ";
+        f_heap << " id : " << node->segment_id;
+        f_heap << " , cnt : " << node->approx_visit_cnt;
+        f_heap << " , units : " << node->current_units_num;
+        f_heap << " , value : " << node->benefit_or_cost;
+        f_heap << " , limit : " << node->units_num_limit;
+        f_heap << " , alive : " << node->is_alive << std::endl;
+    }
+    f_heap << "[DEBUG] step1 c_heap : " << std::endl;
+    for (FilterCacheHeapNode& node : c_heap) {
+        f_heap << " id : " << node->segment_id;
+        f_heap << " , cnt : " << node->approx_visit_cnt;
+        f_heap << " , units : " << node->current_units_num;
+        f_heap << " , value : " << node->benefit_or_cost;
+        f_heap << " , limit : " << node->units_num_limit;
+        f_heap << " , alive : " << node->is_alive << std::endl;
+    }
+
+    f_heap.close();
 }
 
 }
