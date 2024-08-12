@@ -26,6 +26,8 @@
 #include "db/art/vlog_manager.h"
 #include "db/art/heat_buckets.h"
 #include "db/art/clf_model.h"
+#include "db/art/filter_cache_heap.h"
+#include "db/art/greedy_algo.h"
 #include "db/column_family.h"
 #include "db/compaction/compaction_job.h"
 #include "db/dbformat.h"
@@ -1905,16 +1907,22 @@ class DBImpl : public DB {
 
   ClfModel clf_model_;
 
+  FilterCacheHeapManager filter_cache_heap_manager_;
+
   // monitor low-level segments min key and max key
   std::vector<std::vector<std::string>> segments_info_;
 
   // record get cnt in current period, when equal to PERIOD_COUNT, start next period
   uint32_t get_cnt_;
 
-  // record period cnt, if period_cnt_ % TRAIN_PERIODS = 0, start to evaluate or retrain model
-  std::mutex train_mutex_;
+  // record period cnt, if period_cnt_ - last_train_period_ >= TRAIN_PERIODS, start to evaluate or retrain model-
   uint32_t period_cnt_;
-  uint32_t train_period_;
+
+  // record in which period last model trained.
+  uint32_t last_train_period_;
+
+  // train mutex, preventing model trained more than one time
+  std::mutex train_mutex_;
 #endif
   // Offset of last record written by leader writer.
   uint64_t last_record_offset_;

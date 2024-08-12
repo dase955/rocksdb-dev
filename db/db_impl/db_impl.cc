@@ -25,6 +25,8 @@
 #include <utility>
 #include <vector>
 #include <memory>
+#include <fstream>
+#include <thread>
 
 #include "db/art/timestamp.h"
 #include "db/art/logger.h"
@@ -245,7 +247,7 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname,
 #ifdef ART_PLUS
   get_cnt_ = 0;
   period_cnt_ = 0;
-  train_period_ = 0;
+  last_train_period_ = 0;
 #endif
   
   // !batch_per_trx_ implies seq_per_batch_ because it is only unset for
@@ -1755,7 +1757,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
 #ifdef ART
   std::string art_key(key.data(), key.size());
 #ifdef ART_PLUS
-  // ready to estimate hotness
+  // ready to estimate hotness, update heat buckets
   if (heat_buckets_.is_ready()) {
     get_cnt_ += 1;
     if (get_cnt_ >= PERIOD_COUNT) {
@@ -1768,45 +1770,59 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
   }
 
   if (heat_buckets_.is_ready() && period_cnt_ > 0 &&  
-      period_cnt_ - train_period_ >= TRAIN_PERIODS) {
+      period_cnt_ - last_train_period_ >= TRAIN_PERIODS) {
+    bool need_train = false;
     train_mutex_.lock();
-    if (period_cnt_ > 0 &&  
-        period_cnt_ - train_period_ >= TRAIN_PERIODS) {
-      std::cout << "[DEBUG] try to train models" << std::endl;
-      train_period_ = period_cnt_;
-      pid_t pid = fork();
-      assert(pid >= 0);
-      if (pid == 0) {
-        if (!clf_model_.is_ready()) {
-          std::vector<uint16_t> feature_nums;
-          clf_model_.make_ready(feature_nums);
-        }
-
-        std::vector<std::vector<uint32_t>> datas;
-        std::vector<uint16_t> preds;
-        std::uint16_t model_cnt;
-
-        model_cnt = clf_model_.make_train(datas);
-
-        clf_model_.make_predict(datas, preds);
-
-        std::cout << "[DEBUG] already train " << model_cnt << "models in period " << train_period_ << std::endl;
-        std::cout << "[DEBUG] predict result: " << std::endl;
-        for (uint16_t pred : preds) {
-          std::cout << pred << " ";
-        }
-        std::cout << std::endl;
-
-        exit(EXIT_SUCCESS);
-      }
-
-      if (pid == 0) {
-        // if child process dont exit, force to exit.
-        // normally, it will not reach here
-        exit(EXIT_SUCCESS);
-      }
+    if (period_cnt_ - last_train_period_ >= TRAIN_PERIODS) {
+      need_train = true;
+      last_train_period_ = period_cnt_;
     }
     train_mutex_.unlock();
+    // only one thread can train model.
+    if (need_train) {
+      std::fstream f_model;
+      f_model.open("/pg_wal/ycc/model.log", std::ios::out | std::ios::app);
+      f_model << "[DEBUG] try to train models" << std::endl;
+      f_model << "[DEBUG] period_cnt_ : " << period_cnt_ << std::endl;
+      f_model << "[DEBUG] PERIOD_COUNT : " << PERIOD_COUNT << std::endl;
+      f_model << "[DEBUG] TRAIN_PERIODS : " << TRAIN_PERIODS << std::endl;
+        
+      if (!clf_model_.is_ready()) {
+        std::vector<uint16_t> feature_nums;
+        clf_model_.make_ready(feature_nums);
+      }
+
+      std::vector<std::vector<uint32_t>> datas;
+      std::vector<uint16_t> tags;
+      std::vector<uint16_t> preds;
+
+      // std::thread train_thread(make_train, clf_model_, datas, tags);
+		  // train_thread.detach();	
+      clf_model_.make_train(datas, tags);
+
+      clf_model_.make_predict(datas, preds);
+
+      f_model << "[DEBUG] debug predict result: " << std::endl;
+      for (uint16_t& pred : preds) {
+        f_model << pred << " ";
+      }
+      f_model << std::endl << std::endl << std::endl;
+      f_model.close();
+
+      std::fstream f_algo;
+      f_algo.open("/pg_wal/ycc/algo.log", std::ios::out | std::ios::app);
+      f_algo << "[DEBUG] greedy algo debug results : " << std::endl;
+      std::map<uint32_t, uint16_t> algo_solution;
+      uint32_t cache_size = CACHE_SPACE_SIZE;
+      GreedyAlgo greedy_algo;
+      greedy_algo.debug(algo_solution, cache_size);
+      for (auto it = algo_solution.begin(); it != algo_solution.end(); it++) {
+        f_algo << "[DEBUG] " << it->first << " -> " << it->second << std::endl;
+      }
+      f_algo.close();
+
+      filter_cache_heap_manager_.debug();
+    }    
   }
 
 #endif

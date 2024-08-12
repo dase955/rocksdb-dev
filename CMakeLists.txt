@@ -592,6 +592,8 @@ set(SOURCES
         db/art/global_memtable.cc
         db/art/heat_buckets.cc
         db/art/clf_model.cc
+        db/art/filter_cache_heap.cc
+        db/art/greedy_algo.cc
         db/art/heat_group.cc
         db/art/lock.cc
         db/art/logger.cc

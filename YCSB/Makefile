@@ -18,9 +18,10 @@ BIND_LEVELDB ?= 0
 BIND_LMDB ?= 0
 
 EXTRA_LDFLAGS += -lstdc++
-EXTRA_LDFLAGS += -lpython3.12
-EXTRA_CXXFLAGS += -I$(PYTHON_INCLUDE_PATH)
-EXTRA_CXXFLAGS += -L$(PYTHON_LIBRARY_PATH)
+EXTRA_LDFLAGS += -lsocket++
+# EXTRA_LDFLAGS += -lpython3.12
+# EXTRA_CXXFLAGS += -I$(PYTHON_INCLUDE_PATH)
+# EXTRA_CXXFLAGS += -L$(PYTHON_LIBRARY_PATH)
 
 #----------------------------------------------------------
 

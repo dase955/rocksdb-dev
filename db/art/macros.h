@@ -138,26 +138,63 @@ namespace ROCKSDB_NAMESPACE {
  */
 
 // micros for HeatBuckets
-#define BUCKETS_ALPHA 0.2
-#define SAMPLES_LIMIT 10000
-#define SAMPLES_MAXCNT 5000000
-#define PERIOD_COUNT 500000
-#define DEFAULT_BUCKETS 500
-#define MAGIC_FACTOR 500
+
+// hotness update formula
+#define BUCKETS_ALPHA 0.2  
+// samples pool max size, using reservoir sampling
+#define SAMPLES_LIMIT 10000 
+// if recv samples exceed SAMPLES_MAXCNT, end reservoir sampling and init Heat Buckets
+#define SAMPLES_MAXCNT 5000000 
+// short period get count, if get count equal to or exceed PERIOD_COUNT, 
+// end this short period and start next short period
+#define PERIOD_COUNT 50000 
+// number of heat buckets (number of key ranges, see hotness estimating in the paper)
+#define DEFAULT_BUCKETS 500 
+// magic number in class HeatBuckets
+#define MAGIC_FACTOR 500 
 
 // micros for Model Train
-#define TRAIN_PERIODS 20
-#define MODEL_PATH "/pg_wal/ycc/"
-#define MODEL_SUFFIX ".txt"
-#define MODEL_PREFIX "model_"
-#define DATASET_SUFFIX ".csv"
-#define DATASET_PREFIX "dataset_"
-#define SIGNIFICANT_DIGITS 6
+
+// long period = TRAIN_PERIODS * short period. if one long period end, evaluate model and retrain model if necessary
+#define TRAIN_PERIODS 10 
+// dataset csv file name
+#define DATASET_NAME "dataset.csv"
+// the path to save model txt file and train dataset csv file
+#define MODEL_PATH "/pg_wal/ycc/" 
+// we cannot send hotness value (double) to model side, 
+// so we try multiple hotness value by SIGNIFICANT_DIGITS_FACTOR, then send its integer part to model
+#define SIGNIFICANT_DIGITS_FACTOR 1e6 
+
+// config micro connecting to LightGBM server 
+
+// we use Inet socket to connect server
+#define HOST "127.0.0.1"
+#define PORT "9090"
+// max size of socket receive buffer size
+#define BUFFER_SIZE 8
+// socket message prefix
+#define TRAIN_PREFIX "t "
+#define PREDICT_PREFIX "p "
 
 // micros for filter cache
-#define DEFAULT_UNITS 5
-#define BITS_PER_KEY 2
-#define MAX_UNITS 10
-#define MIN_UNITS 0
+
+// before model work, we enable DEFAULT_UNITS_NUM units for every segments
+#define DEFAULT_UNITS_NUM 5
+// bits-per-key for every filter unit of every segment, 
+// found default bits-per-key = DEFAULT_UNITS_NUM * BITS_PER_KEY_PER_UNIT = 10
+// equal to primary value of paper benchmark config value
+#define BITS_PER_KEY_PER_UNIT 4
+// max unit nums for every segment, we only generate MAX_UNITS_NUM units for every segment
+#define MAX_UNITS_NUM 6
+// we enable 0 unit for coldest segments
+#define MIN_UNITS_NUM 0
+// default max size of cache space : 8 * 1024 * 1024 * 128 = 1073741824 bit = 128 MB
+#define CACHE_SPACE_SIZE 1073741824
+// fitler cache helper heap type
+#define BENEFIT_HEAP 0
+#define COST_HEAP 1
+#define UNKNOWN_HEAP 2
+// visit cnt update bound
+#define VISIT_CNT_UPDATE_BOUND 100
 
 }  // namespace ROCKSDB_NAMESPACE

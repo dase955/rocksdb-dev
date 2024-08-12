@@ -1,14 +1,17 @@
 import pandas as pd
 import lightgbm
 import numpy
+import sys
+from io import StringIO
 
 # dataset: train dataset path
 # output: saved model path
 def train(dataset: str, output: str):
+    # sys.stdout = StringIO()
     df = pd.read_csv(dataset)
     y = df['Target']
     X = df.drop(columns=['Target'])
-    clf = lightgbm.LGBMClassifier()
+    clf = lightgbm.LGBMClassifier(n_estimators=2, num_leaves=16, max_depth=8)
     clf.fit(X, y)
     # val_pred = clf.predict(X_test)
     clf.booster_.save_model(output)
