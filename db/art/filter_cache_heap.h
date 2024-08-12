@@ -10,6 +10,14 @@
 #include "macros.h"
 
 namespace ROCKSDB_NAMESPACE {
+// when filter cache is full , 
+// we need to use heap manager to 
+// clear some space and insert new filter units 
+// for these coming new segments
+// or we may need to use heap manager to adjust filter cache
+// to reduce extra I/O caused by false positive 
+
+// reminded that we use this module only when filter cache is full !!!
 
 struct FilterCacheHeapItem;
 typedef FilterCacheHeapItem* FilterCacheHeapNode;
@@ -54,8 +62,12 @@ struct FilterCacheHeapItem {
 struct FilterCacheModifyResult {
     uint32_t enable_segment_id;
     uint32_t disable_segment_id;
+    uint16_t enable_segment_units_num;
+    uint16_t disable_segment_units_num;
     uint16_t enable_segment_next_units_num;
     uint16_t disable_segment_next_units_num;
+    double enable_benefit;
+    double disable_cost;
 };
 
 inline bool FilterCacheHeapNodeLessComparor(const FilterCacheHeapNode& node_1, const FilterCacheHeapNode& node_2) {
