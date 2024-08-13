@@ -158,6 +158,10 @@ public:
         heap_.clear();
     }
 
+    ~FilterCacheHeap() {
+        // do nothing
+    }
+
     void set_type(const int type) {
         heap_type_ = type;
     }
@@ -235,6 +239,10 @@ public:
         cost_heap_.set_type(COST_HEAP);
         heap_visit_cnt_recorder_.clear();
         units_num_limit_recorder_.clear();
+    }
+
+    ~FilterCacheHeapManager() {
+        // do nothing
     }
 
     // sync units_num_limit in heap and recorder
