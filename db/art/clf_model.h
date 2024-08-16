@@ -19,7 +19,26 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+struct RangeHeatPair;
 class ClfModel;
+bool RangeHeatPairLesserComparor(const RangeHeatPair& pair_1, const RangeHeatPair& pair_2);
+bool RangeHeatPairGreaterComparor(const RangeHeatPair& pair_1, const RangeHeatPair& pair_2);
+
+struct RangeHeatPair {
+    uint32_t range_id;
+    double hotness_val;
+    RangeHeatPair(const uint32_t& id, const double& hotness) {
+        range_id = id; hotness_val = hotness;
+    }
+};
+
+bool RangeHeatPairLesserComparor(const RangeHeatPair& pair_1, const RangeHeatPair& pair_2) {
+    return pair_1.hotness_val < pair_2.hotness_val;
+}
+
+bool RangeHeatPairGreaterComparor(const RangeHeatPair& pair_1, const RangeHeatPair& pair_2) {
+    return pair_1.hotness_val > pair_2.hotness_val;
+}
 
 class ClfModel {
 private:
@@ -71,11 +90,11 @@ public:
 
     // resize every data point and write to csv file for training
     void write_debug_dataset();
-    void write_real_dataset(std::vector<std::vector<uint32_t>>& datas, std::vector<uint16_t>& tags);
-    void write_dataset(std::vector<std::vector<uint32_t>>& datas, std::vector<uint16_t>& tags);
+    void write_real_dataset(std::vector<std::vector<uint32_t>>& datas, std::vector<uint16_t>& tags, std::vector<uint32_t>& get_cnts);
+    void write_dataset(std::vector<std::vector<uint32_t>>& datas, std::vector<uint16_t>& tags, std::vector<uint32_t>& get_cnts);
 
     // write dataset then send msg to train new model in LightGBM server side
-    void make_train(std::vector<std::vector<uint32_t>>& datas, std::vector<uint16_t>& tags);
+    void make_train(std::vector<std::vector<uint32_t>>& datas, std::vector<uint16_t>& tags, std::vector<uint32_t>& get_cnts);
 
     // predict
     void make_predict_samples(std::vector<std::vector<uint32_t>>& datas);

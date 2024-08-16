@@ -6,6 +6,7 @@
 #include <cassert>
 #include <vector>
 #include <map>
+#include <set>
 #include <unordered_map>
 #include "macros.h"
 #include "greedy_algo.h"
@@ -16,25 +17,17 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-// FilterCacheManager主体为FilterCache
-// 其为一个Map，Key为segment id，Value为一个Segment的Filter Units的相关结构，其能自行启用/禁用Unit，并可以输入key判断存在性
-// 其次还需维护HeatBuckets、FilterCacheHeapManager、ClfModel
-// 功能如下：
-// 1. 实时记录每一个可用的Segment的访问频数来更新周期
-// 2. 根据周期更新HeatBuckets和ClfModel
-// 3. 一旦更新ClfModel，重新预测并对FilterCacheHeapManager里的Heap进行更新 (工作负载发生改变)
-// 4. 如果有旧的Segment被合并，同时必须有新的Segment，新的Segment将继承其访问频数
-// 5. 新的Segment将用ClfModel预测并插入到FilterCacheHeapManager里的Heap中，先尽量插入unit，后台的Heap会自动调整，来为新的Segment自适应启用Units
-// 6. 同时维护上一个大周期的访问频数，一旦这个周期里Segment被合并，其访问频数会继承到子Segment上
-
+class FilterCache;
+class FilterCacheManager;
 
 // FilterCache main component is a STL Map, key -- segment id, value -- Structure of Filter Units （ called FilterCacheItem）
 // its main job is auto enable/disable filter units for one segment, and check whether one key exists in enabled units
 // its work is below:
 // 1. enable / disable units for a batch of segments (one segment may not exist in FilterCache)
-// 2. check whether one given key exist in one segment
+// 2. check whether one given key exists in one segment
 // 3. check whether filter cache is approximately full
-// 4. check whether ready to start tow-heaps units adjustment
+// 4. check whether ready to train first model
+// TODO: 5. release FilterCacheItem of these merged (outdated) segments
 class FilterCache {
 private:
     std::map<uint32_t, FilterCacheItem> filter_cache_;
@@ -52,14 +45,85 @@ public:
 
     // enable / disable units for a batch of segments (one segment may not exist in FilterCache)
     // if enabled units num exceed given units num, it will disable units
-    void enable_for_segments(std::unordered_map<uint32_t, uint16_t>& segments_units_num);
+    void enable_for_segments(std::unordered_map<uint32_t, uint16_t>& segment_units_num_recorder);
 
     // check whether filter cache is approximately full
     // actually, we will leave (1-FULL_RATE) * cache_size_ space for emergency usage
     bool is_full();
 
-    // check whether ready to start tow-heaps units adjustment
+    // check whether ready to train first model
     bool is_ready();
+};
+
+// FilterCacheManager主体为FilterCache
+// 其为一个Map，Key为segment id，Value为一个Segment的Filter Units的相关结构，其能自行启用/禁用Unit，并可以输入key判断存在性
+// 其次还需维护HeatBuckets、FilterCacheHeapManager、ClfModel
+// 功能如下：
+// 1. 实时记录每一个可用的Segment的访问频数来更新周期
+// 2. 根据周期更新HeatBuckets和ClfModel
+// 3. 一旦更新ClfModel，重新预测并对FilterCacheHeapManager里的Heap进行更新 (工作负载发生改变)
+// 4. 如果有旧的Segment被合并，同时必须有新的Segment，新的Segment将继承其访问频数
+// 5. 新的Segment将用ClfModel预测并插入到FilterCacheHeapManager里的Heap中，先尽量插入unit，后台的Heap会自动调整，来为新的Segment自适应启用Units
+// 6. 同时维护上一个大周期的访问频数，一旦这个周期里Segment被合并，其访问频数会继承到子Segment上
+
+// FilterCacheManager is combined of these components:
+// HeatBuckets, ClfModel, FilterCacheHeapManager, ...
+// its work is below:
+// TODO: 1. input segment id and target key, check whether target key exist in this segment 
+// TODO: 2. if one check done, add 1 to the get cnt of this segment. we need to maintain get cnts record in last long period and current long period
+// TODO: 3. Inherit: convert get cnts of merged segments to get cnts of newly generated segments (get cnts in both last long period and current long period)
+// 4. record total get cnt and update short periods, reminded TRAIN_PERIODS short periods is a long period
+// 5. if a short period end, update HeatBuckets
+// TODO: 6. if a long period end, use greedy algorithm to solve filter units allocation problem and evaluate old model with this solution. if model doesnt work well, retrain it
+// TODO: 7. if model still works well or model already retrained, we predict new ideal units num for current segments, release unnecessary filter units and update FIlterCacheHeap
+// TODO: 8. if new segments are generated, we need to predict ideal units num for them, insert filter units as much as possible and update FIlterCacheHeap.
+// TODO: 9. after one short period end (but current long period not end), estimate current segments' approximate get cnts, then use these estimated get cnts to update FIlterCacheHeap 
+// TODO: 10. before FilterCache becomes full for the first time, just set default units num for every segments and insert filter units for segments
+// TODO: 11. After FilterCache becomes full for the first time, start a background thread to monitor FitlerCacheHeap and use two-heaps adjustment to optimize FilterCache (this thread never ends)
+class FilterCacheManager {
+private:
+    static HeatBuckets heat_buckets_;
+    static ClfModel clf_model_;
+    static uint32_t get_cnt_; // record get cnt in current period, when exceeding PERIOD_COUNT, start next period
+    static uint32_t period_cnt_; // record period cnt, if period_cnt_ - last_train_period_ >= TRAIN_PERIODS, start to evaluate or retrain ClfModel
+    static std::mutex train_mutex_; // guarantee ClfModel only trained once in one long period
+    static std::map<uint32_t, 
+public:
+    FilterCacheManager() { get_cnt_ = 0; };
+
+    ~FilterCacheManager();
+
+
+
+    // noticed that at the beginning, heat buckets need to sample put keys to init itself before heat buckets start to work
+    // segment_info_recorder is external variable that records every alive segments' min key and max key
+    // it is like { segment 1: [min_key_1, max_key_1], segment 2: [min_key_2, max_key_2], ... }
+    void make_heat_buckets_ready(const std::string& key, std::unordered_map<uint32_t, std::vector<std::string>>& segment_info_recorder);
+
+    // add 1 to get cnt for every get opt
+    // update short periods if get cnt exceeds PERIOD_COUNT
+    // every get opt will make add 1 to only one heat bucket counter 
+    void hit_one_heat_bucket(const std::string& key);
+
+    // if one long period end, we need to check effectiveness of model. 
+    // if model doesnt work well in current workload, we retrain this model
+    // 1. use greedy algorithm to solve filter units allocation problem (receive ideal enabled units num for every current segments)
+    // 2. write filter units nums and segment-related features to a csv file
+    // 3. python lightgbm server maintain latest model. it will read the csv file and use I/O cost metric to check effectiveness of this model
+    // 4. if effectiveness check not pass, retrain this model
+    // reminded that if this new model training not end, lightgbm still use old model to predict ideal units num for segments
+    // TODO 1: because of the time cost of writing csv file, we need to do this func with a background thread
+    // TODO 2: need real benchmark data to debug this func
+    // level_recorder: { segment 1: level_1, segment 2: level_2, ... }, level_k is the index of LSM-Tree level (0, 1, 2, ...)
+    // range_heat_recorder: { segment 1: {{range_id_1, hotness_val_1}, ...}, ... },
+    // Attention: we assume for every segment, its ranges in range_heat_recorder value must be unique!!!
+    // get_cnt_recorder: { segment 1: get_cnt_1, ... }
+    // all 3 recorders need to maintain all current segments info, and their keys size and keys set should be the same (their keys are segment ids)
+    void try_retrain_model(std::map<uint32_t, uint16_t>& level_recorder,
+                           std::map<uint32_t, std::vector<RangeHeatPair>>& range_heat_recorder,
+                           std::map<uint32_t, uint32_t>& get_cnt_recorder);
+
+
 };
 
 }

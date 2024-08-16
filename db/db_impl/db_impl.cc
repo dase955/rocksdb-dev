@@ -1794,11 +1794,12 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
 
       std::vector<std::vector<uint32_t>> datas;
       std::vector<uint16_t> tags;
+      std::vector<uint32_t> get_cnts;
       std::vector<uint16_t> preds;
 
       // std::thread train_thread(make_train, clf_model_, datas, tags);
 		  // train_thread.detach();	
-      clf_model_.make_train(datas, tags);
+      clf_model_.make_train(datas, tags, get_cnts);
 
       clf_model_.make_predict(datas, preds);
 
