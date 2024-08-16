@@ -17,8 +17,6 @@ namespace ROCKSDB_NAMESPACE {
 // or we may need to use heap manager to adjust filter cache
 // to reduce extra I/O caused by false positive 
 
-// reminded that we use this module only when filter cache is full !!!
-
 struct FilterCacheHeapItem;
 typedef FilterCacheHeapItem* FilterCacheHeapNode;
 struct FilterCacheModifyResult;
