@@ -229,6 +229,7 @@ private:
     // when filter cache call upsert, this recorder will automately upsert these segment ids
     static std::map<uint32_t, uint32_t> heap_visit_cnt_recorder_;
     static std::map<uint32_t, uint16_t> units_num_limit_recorder_;
+    // TODO: mutex can be optimized
     static std::mutex manager_mutex_; 
 
 public:
