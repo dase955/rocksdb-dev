@@ -74,19 +74,19 @@ public:
 // its work is below:
 // 1. input segment id and target key, check whether target key exist in this segment 
 // 2. if one check done, add 1 to the get cnt of this segment. we need to maintain get cnts record in last long period and current long period
-// TODO: 3. Inherit: convert get cnts of merged segments to get cnts of newly generated segments (get cnts in both last long period and current long period)
+// 3. Inherit: convert get cnts of merged segments to get cnts of newly generated segments (get cnts in both last long period and current long period)
 // 4. use existing counts of segments in last and current long period to estimate a approximate get cnt for one alive segment
-// TODO: 4. record total get cnt and update short periods, reminded TRAIN_PERIODS short periods is a long period
-// TODO: 5. if a short period end, update HeatBuckets
-// TODO: 6. if a long period end, use greedy algorithm to solve filter units allocation problem and evaluate old model with this solution. if model doesnt work well, retrain it
-// TODO: 7. if model still works well or model already retrained, we predict new ideal units num for current segments, release unnecessary filter units and update FIlterCacheHeap
-// TODO: 8. if new segments are generated, we need to predict ideal units num for them, insert filter units (if cache have space left) and update FIlterCacheHeap.
-// TODO: 9. after one short period end (but current long period not end), estimate current segments' approximate get cnts, then use these estimated get cnts to update FIlterCacheHeap 
-// TODO: 10. before FilterCache becomes full for the first time, just set default units num for every segments and insert filter units for segments
-// TODO: 11. After FilterCache becomes full for the first time, start a background thread to monitor FitlerCacheHeap and use two-heaps adjustment to optimize FilterCache (this thread never ends)
+// 5. record total get cnt and update short periods, reminded TRAIN_PERIODS short periods is a long period
+// 6. if a short period end, update HeatBuckets
+// TODO: 7. if a long period end, use greedy algorithm to solve filter units allocation problem and evaluate old model with this solution. if model doesnt work well, retrain it
+// TODO: 8. if model still works well or model already retrained, we predict new ideal units num for current segments, release unnecessary filter units and update FIlterCacheHeap
+// TODO: 9. if new segments are generated, we need to predict ideal units num for them, insert filter units (if cache have space left) and update FIlterCacheHeap.
+// TODO: 10. after one short period end (but current long period not end), estimate current segments' approximate get cnts, then use these estimated get cnts to update FIlterCacheHeap 
+// TODO: 11. before FilterCache becomes full for the first time, just set default units num for every segments and insert filter units for segments
+// TODO: 12. After FilterCache becomes full for the first time, start a background thread to monitor FitlerCacheHeap and use two-heaps adjustment to optimize FilterCache (this thread never ends)
 class FilterCacheManager {
 private:
-    // TODO: mutex can be optimized
+    // TODO: mutex can be optimized or use a message queue or a thread pool to reduce time costed by mutex
     static FilterCache filter_cache_;
     static HeatBuckets heat_buckets_;
     static ClfModel clf_model_;
@@ -112,9 +112,10 @@ public:
     // copy counts to last_count_recorder and reset counts of current_count_recorder
     void update_count_recorder();
 
-    // TODO: inherit counts of merged segments to counts of new segments and remove counts of merged segments
+    // inherit counts of merged segments to counts of new segments and remove counts of merged segments
     // inherit_infos_recorder: { {new segment 1: [{old segment 1: inherit rate 1}, {old segment 2: inherit rate 2}, ...]}, ...}
-    void inherit_count_recorder(std::map<uint32_t, std::unordered_map<uint32_t, double>>& inherit_infos_recorder);
+    void inherit_count_recorder(std::vector<uint32_t> merged_segment_ids, std::vector<uint32_t> new_segment_ids,
+                                std::map<uint32_t, std::unordered_map<uint32_t, double>>& inherit_infos_recorder);
 
     // estimate approximate get cnts for every alive segment
     void estimate_count(std::map<uint32_t, uint32_t>& approximate_counts_recorder);

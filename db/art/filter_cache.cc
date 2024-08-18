@@ -137,8 +137,47 @@ void FilterCacheManager::update_count_recorder() {
     count_mutex_.unlock();
 }
 
-void FilterCacheManager::inherit_count_recorder(std::map<uint32_t, std::unordered_map<uint32_t, double>>& inherit_infos_recorder) {
+void FilterCacheManager::inherit_count_recorder(std::vector<uint32_t> merged_segment_ids, std::vector<uint32_t> new_segment_ids,
+                                                std::map<uint32_t, std::unordered_map<uint32_t, double>>& inherit_infos_recorder) {
+    std::map<uint32_t, uint32_t> merged_last_count_recorder, merged_current_count_recorder; // cache merged segment count temporarily
+    for (uint32_t& merged_segment_id : merged_segment_ids) {
+        merged_last_count_recorder.insert(std::make_pair(merged_segment_id, last_count_recorder_[merged_segment_id]));
+        last_count_recorder_.erase(merged_segment_id);
+        merged_current_count_recorder.insert(std::make_pair(merged_segment_id, current_count_recorder_[merged_segment_id]));
+        current_count_recorder_.erase(merged_segment_id);
+    }
 
+    std::map<uint32_t, uint32_t> new_last_count_recorder, new_current_count_recorder;
+    for (auto infos_it = inherit_infos_recorder.begin(); infos_it != inherit_infos_recorder.end(); infos_it ++) {
+        double last_count = 0, current_count = 0;
+        std::unordered_map<uint32_t, double>& info = infos_it->second;
+        for (auto info_it = info.begin(); info_it != info.end(); info_it ++) {
+            last_count = last_count + (merged_last_count_recorder[info_it->first] * info_it->second);
+            current_count = current_count + (merged_current_count_recorder[info_it->first] * info_it->second);
+        }
+        new_last_count_recorder.insert(std::make_pair(infos_it->first, uint32_t(last_count)));
+        new_current_count_recorder.insert(std::make_pair(infos_it->first, uint32_t(current_count)));
+    }
+
+    count_mutex_.lock();
+
+    for (uint32_t& new_segment_id : new_segment_ids) {
+        auto last_it = last_count_recorder_.find(new_segment_id);
+        if (last_it != last_count_recorder_.end()) {
+            last_it->second = last_it->second + new_last_count_recorder[new_segment_id];
+        } else {
+            last_count_recorder_.insert(std::make_pair(new_segment_id, new_last_count_recorder[new_segment_id]));
+        }
+
+        auto current_it = current_count_recorder_.find(new_segment_id);
+        if (current_it != current_count_recorder_.end()) {
+            current_it->second = current_it->second + new_current_count_recorder[new_segment_id];
+        } else {
+            current_count_recorder_.insert(std::make_pair(new_segment_id, new_current_count_recorder[new_segment_id]));
+        }
+    }
+
+    count_mutex_.unlock();
 }
 
 void FilterCacheManager::estimate_count(std::map<uint32_t, uint32_t>& approximate_counts_recorder) {
