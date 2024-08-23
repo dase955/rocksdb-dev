@@ -197,7 +197,7 @@ namespace ROCKSDB_NAMESPACE {
 // visit cnt update bound
 #define VISIT_CNT_UPDATE_BOUND 10
 // filter cache map threshold
-#define FULL_RATE 0.95
+#define FULL_RATE 0.90
 #define READY_RATE 0.70
 
 }  // namespace ROCKSDB_NAMESPACE

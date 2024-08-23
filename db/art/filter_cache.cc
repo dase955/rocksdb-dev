@@ -6,9 +6,13 @@ namespace ROCKSDB_NAMESPACE {
 FilterCache FilterCacheManager::filter_cache_;
 HeatBuckets FilterCacheManager::heat_buckets_;
 ClfModel FilterCacheManager::clf_model_;
+GreedyAlgo FilterCacheManager::greedy_algo_;
+FilterCacheHeapManager FilterCacheManager::heap_manager_;
 uint32_t FilterCacheManager::get_cnt_;
 uint32_t FilterCacheManager::period_cnt_;
-std::mutex FilterCacheManager::train_mutex_;
+uint32_t FilterCacheManager::last_long_period_;
+std::mutex FilterCacheManager::update_mutex_;
+bool FilterCacheManager::train_signal_;
 std::map<uint32_t, uint32_t> FilterCacheManager::last_count_recorder_; 
 std::map<uint32_t, uint32_t> FilterCacheManager::current_count_recorder_; 
 std::mutex FilterCacheManager::count_mutex_;
@@ -46,6 +50,25 @@ void FilterCache::enable_for_segments(std::unordered_map<uint32_t, uint16_t>& se
     filter_cache_mutex_.unlock();
 }
 
+void FilterCache::update_for_segments(std::unordered_map<uint32_t, uint16_t>& segment_units_num_recorder) {
+    filter_cache_mutex_.lock();
+    for (auto it = segment_units_num_recorder.begin(); it != segment_units_num_recorder.end(); it ++) {
+        const uint32_t segment_id = it->first;
+        const uint16_t units_num = it->second;
+        auto cache_it = filter_cache_.find(segment_id);
+        if (cache_it != filter_cache_.end()) {
+            // filter units cached
+            const uint32_t old_size = (cache_it->second).approximate_size();
+            (cache_it->second).enable_units(units_num);
+            used_space_size_ = used_space_size_ - old_size + (cache_it->second).approximate_size();
+        } else {
+            // filter units not cached
+            // do nothing!!!
+        }
+    }
+    filter_cache_mutex_.unlock();
+}
+
 bool FilterCache::is_full() {
     return double(used_space_size_) / double(cache_size_) >= FULL_RATE;
 }
@@ -54,7 +77,7 @@ bool FilterCache::is_ready() {
     return double(used_space_size_) / double(cache_size_) >= READY_RATE;
 }
 
-void FilterCache::enable_for_segments(std::vector<uint32_t>& segment_ids) {
+void FilterCache::release_for_segments(std::vector<uint32_t>& segment_ids) {
     std::sort(segment_ids.begin(), segment_ids.end());
     // delete key-value pair in filter_cache_
     filter_cache_mutex_.lock();
@@ -72,7 +95,6 @@ void FilterCache::enable_for_segments(std::vector<uint32_t>& segment_ids) {
     }
     filter_cache_mutex_.unlock();
 }
-
 
 bool FilterCacheManager::make_heat_buckets_ready(const std::string& key, 
                                                  std::unordered_map<uint32_t, std::vector<std::string>>& segment_info_recorder) {
@@ -98,15 +120,22 @@ void FilterCacheManager::hit_heat_buckets(const std::string& key) {
             heat_buckets_.hit(key, false);
         }
     }
-}
+    if (period_cnt_ - last_long_period_ >= TRAIN_PERIODS) {
+        update_mutex_.lock();
 
-void FilterCacheManager::try_retrain_model(std::map<uint32_t, uint16_t>& level_recorder,
-                                           std::map<uint32_t, std::vector<RangeHeatPair>>& range_heat_recorder,
-                                           std::map<uint32_t, uint32_t>& get_cnt_recorder) {
-    
+        if (period_cnt_ - last_long_period_ >= TRAIN_PERIODS) {
+            update_count_recorder();
+            last_long_period_ = period_cnt_;
+            train_signal_ = true;
+        }
+
+        update_mutex_.unlock();
+    }
 }
 
 bool FilterCacheManager::check_key(const uint32_t& segment_id, const std::string& key) {
+    hit_count_recorder(segment_id); // one get opt will cause query to many segments.
+    // so one get opt only call one hit_heat_buckets, but call many hit_count_recorder
     return filter_cache_.check_key(segment_id, key);
 }
 
@@ -137,7 +166,7 @@ void FilterCacheManager::update_count_recorder() {
     count_mutex_.unlock();
 }
 
-void FilterCacheManager::inherit_count_recorder(std::vector<uint32_t> merged_segment_ids, std::vector<uint32_t> new_segment_ids,
+void FilterCacheManager::inherit_count_recorder(std::vector<uint32_t>& merged_segment_ids, std::vector<uint32_t>& new_segment_ids,
                                                 std::map<uint32_t, std::unordered_map<uint32_t, double>>& inherit_infos_recorder) {
     std::map<uint32_t, uint32_t> merged_last_count_recorder, merged_current_count_recorder; // cache merged segment count temporarily
     for (uint32_t& merged_segment_id : merged_segment_ids) {
@@ -201,6 +230,151 @@ void FilterCacheManager::estimate_count(std::map<uint32_t, uint32_t>& approximat
     }
 
     // return nothing, already write result to approximate_counts_recorder
+}
+
+
+void FilterCacheManager::try_retrain_model(std::map<uint32_t, uint16_t>& level_recorder,
+                                           std::map<uint32_t, std::vector<uint32_t>>& segment_ranges_recorder,
+                                           std::map<uint32_t, uint32_t>& unit_size_recorder) {
+    // we should guarantee these 3 external recorder share the same keys set
+    // we need to do this job outside FilterCacheManager
+    assert(level_recorder.size() == segment_ranges_recorder.size());
+    assert(level_recorder.size() == unit_size_recorder.size());
+    if (train_signal_ == false) {
+        return;
+    }
+
+    // solve programming problem
+    std::map<uint32_t, uint16_t> label_recorder;
+    std::map<uint32_t, SegmentAlgoInfo> algo_infos;
+    auto get_cnt_it = last_count_recorder_.begin();
+    auto unit_size_it = unit_size_recorder.begin();
+    while (unit_size_it != unit_size_recorder.end() && get_cnt_it != last_count_recorder_.end()) {
+        if (unit_size_it->first > get_cnt_it->first) {
+            get_cnt_it ++;
+        } else if (unit_size_it->first < get_cnt_it->first) {
+            unit_size_it ++;
+        } else {
+            algo_infos.insert(std::make_pair(unit_size_it->first, SegmentAlgoInfo(get_cnt_it->second, unit_size_it->second)));
+            unit_size_it ++;
+        }
+    }
+    greedy_algo_.solve(algo_infos, label_recorder, CACHE_SPACE_SIZE * FULL_RATE);
+
+    // programming problem may not include some latest segments, we need to ignore them
+    auto old_level_it = level_recorder.begin();
+    auto old_range_it = segment_ranges_recorder.begin();
+    auto old_label_it = label_recorder.begin();
+    while (old_level_it != level_recorder.end() && 
+           old_range_it != segment_ranges_recorder.end() && 
+           old_label_it != label_recorder.end()) {
+        assert(old_level_it->first == old_range_it->first);
+        if (old_level_it->first != old_label_it->first) {
+            old_level_it = level_recorder.erase(old_label_it);
+            old_range_it = segment_ranges_recorder.erase(old_range_it);
+        } else {
+            old_level_it ++;
+            old_range_it ++;
+            old_label_it ++;
+        }
+    }
+
+    std::vector<Bucket> buckets = heat_buckets_.buckets();
+    std::vector<std::vector<uint32_t>> datas;
+    std::vector<uint16_t> labels;
+    std::vector<uint32_t> get_cnts;
+
+    auto level_it = level_recorder.begin(); // key range id start with 0
+    auto ranges_it = segment_ranges_recorder.begin();
+    auto count_it = last_count_recorder_.begin();
+    auto label_it = label_recorder.begin();
+    while (level_it != level_recorder.end() && ranges_it != segment_ranges_recorder.end() &&
+          count_it != last_count_recorder_.end() && label_it != label_recorder.end()) {
+        assert(level_it->first == ranges_it->first);
+        assert(level_it->first == label_it->first);
+        if (count_it->first < level_it->first) {
+            count_it ++;
+        } else if (count_it->first > level_it->first) {
+            level_it ++;
+            ranges_it ++;
+            label_it ++;
+        } else {
+            // add data row
+            std::vector<uint32_t> data;
+            data.emplace_back(level_it->second);
+            for (uint32_t& range_id : ranges_it->second) {
+                assert(range_id >= 0 && range_id < buckets.size());
+                data.emplace_back(range_id);
+                data.emplace_back(uint32_t(SIGNIFICANT_DIGITS_FACTOR * buckets[range_id].hotness_));
+            }
+            datas.emplace_back(data);
+            // add label row
+            labels.emplace_back(label_it->second);
+            // add get cnt row
+            get_cnts.emplace_back(count_it->second);
+
+            level_it ++;
+            ranges_it ++;
+            label_it ++;
+        }
+    }
+
+    clf_model_.make_train(datas, labels, get_cnts);
+
+    train_signal_ = false;
+}
+
+void FilterCacheManager::update_cache_and_heap(std::map<uint32_t, uint16_t>& level_recorder,
+                                               std::map<uint32_t, std::vector<uint32_t>>& segment_ranges_recorder) {
+    assert(level_recorder.size() == segment_ranges_recorder.size());
+    std::vector<uint32_t> segment_ids;
+    std::vector<std::vector<uint32_t>> datas;
+    std::vector<uint16_t> preds;
+    std::unordered_map<uint32_t, uint16_t> segment_units_num_recorder;
+    std::map<uint32_t, uint16_t> current_units_num_limit_recorder;
+    std::vector<Bucket> buckets = heat_buckets_.buckets();
+
+    // build data rows into datas
+    auto level_it = level_recorder.begin();
+    auto range_it = segment_ranges_recorder.begin();
+    while (level_it != level_recorder.end() && range_it != segment_ranges_recorder.end()) {
+        assert(level_it->first == range_it->first);
+
+        segment_ids.emplace_back(level_it->first);
+
+        std::vector<uint32_t> data;
+        data.emplace_back(level_it->second);
+        for (uint32_t& range_id : range_it->second) {
+            assert(range_id >= 0 && range_id < buckets.size());
+            data.emplace_back(range_id);
+            data.emplace_back(uint32_t(SIGNIFICANT_DIGITS_FACTOR * buckets[range_id].hotness_));
+        }
+        datas.emplace_back(data);
+
+        level_it ++;
+        range_it ++;
+    }
+
+    // use datas to make prediction
+    clf_model_.make_predict(datas, preds);
+    assert(segment_ids.size() == preds.size());
+    size_t idx = 0;
+    while (idx < segment_ids.size() && idx < preds.size()) {
+        segment_units_num_recorder.insert(std::make_pair(segment_ids[idx], preds[idx]));
+        current_units_num_limit_recorder.insert(std::make_pair(segment_ids[idx], preds[idx]));
+        idx = idx + 1;
+    }
+
+    // update filter cache
+    filter_cache_.update_for_segments(segment_units_num_recorder);
+
+    // update filter cache helper heaps
+    heap_manager_.sync_units_num_limit(current_units_num_limit_recorder);
+}
+
+void FilterCacheManager::remove_segments(std::vector<uint32_t>& segment_ids) {
+    filter_cache_.release_for_segments(segment_ids);
+    heap_manager_.batch_delete(segment_ids);
 }
 
 }

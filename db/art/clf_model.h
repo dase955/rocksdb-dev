@@ -14,6 +14,9 @@
 // every key range have id and hotness ( see heat_buckets )
 // so data point features format : 
 // LSM-Tree level, Key Range 1 id, Key Range 1 hotness, Key Range 2 id, Key Range 2 hotness, ..., Key Range r id, Key Range r hotness
+// we also need to append best units num and visit count to every row
+// so in data csv, one row would be like:
+// LSM-Tree level, key range 1 id, key range 1 hotness, ..., best units num (for the segment), visit count to this segment (in last long peroid)
 // remind that heat_buckets recorded hotness is double type, 
 // we use uint32_t(uint32_t(SIGNIFICANT_DIGITS * hotness)) to closely estimate its hotness value
 
