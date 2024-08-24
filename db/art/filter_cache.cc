@@ -124,9 +124,21 @@ void FilterCacheManager::hit_heat_buckets(const std::string& key) {
         update_mutex_.lock();
 
         if (period_cnt_ - last_long_period_ >= TRAIN_PERIODS) {
-            update_count_recorder();
             last_long_period_ = period_cnt_;
+            update_count_recorder();
             train_signal_ = true;
+        }
+
+        update_mutex_.unlock();
+    }
+    if (period_cnt_ - last_short_period_ >= 1) {
+        update_mutex_.lock();
+
+        if (period_cnt_ - last_short_period_ >= 1) {
+            last_short_period_ = period_cnt_;
+            std::map<uint32_t, uint32_t> estimate_count_recorder;
+            estimate_counts_for_all(estimate_count_recorder);
+            heap_manager_.sync_visit_cnt(estimate_count_recorder);
         }
 
         update_mutex_.unlock();
@@ -209,10 +221,10 @@ void FilterCacheManager::inherit_count_recorder(std::vector<uint32_t>& merged_se
     count_mutex_.unlock();
 }
 
-void FilterCacheManager::estimate_count(std::map<uint32_t, uint32_t>& approximate_counts_recorder) {
+void FilterCacheManager::estimate_counts_for_all(std::map<uint32_t, uint32_t>& approximate_counts_recorder) {
     const uint32_t long_period_total_count = TRAIN_PERIODS * PERIOD_COUNT;
     uint32_t current_long_period_count = PERIOD_COUNT * (period_cnt_ % TRAIN_PERIODS) + get_cnt_;
-    double current_long_period_rate = double(current_long_period_count) / double(long_period_total_count);
+    double current_long_period_rate = std::min(double(current_long_period_count) / double(long_period_total_count), 1.0);
 
     approximate_counts_recorder.clear();
     approximate_counts_recorder.insert(current_count_recorder_.begin(), current_count_recorder_.end());
@@ -299,19 +311,21 @@ void FilterCacheManager::try_retrain_model(std::map<uint32_t, uint16_t>& level_r
             ranges_it ++;
             label_it ++;
         } else {
-            // add data row
-            std::vector<uint32_t> data;
-            data.emplace_back(level_it->second);
-            for (uint32_t& range_id : ranges_it->second) {
-                assert(range_id >= 0 && range_id < buckets.size());
-                data.emplace_back(range_id);
-                data.emplace_back(uint32_t(SIGNIFICANT_DIGITS_FACTOR * buckets[range_id].hotness_));
+            if (level_it->second > 0) {
+                // add data row
+                std::vector<uint32_t> data;
+                data.emplace_back(level_it->second);
+                for (uint32_t& range_id : ranges_it->second) {
+                    assert(range_id >= 0 && range_id < buckets.size());
+                    data.emplace_back(range_id);
+                    data.emplace_back(uint32_t(SIGNIFICANT_DIGITS_FACTOR * buckets[range_id].hotness_));
+                }
+                datas.emplace_back(data);
+                // add label row
+                labels.emplace_back(label_it->second);
+                // add get cnt row
+                get_cnts.emplace_back(count_it->second);
             }
-            datas.emplace_back(data);
-            // add label row
-            labels.emplace_back(label_it->second);
-            // add get cnt row
-            get_cnts.emplace_back(count_it->second);
 
             level_it ++;
             ranges_it ++;
@@ -340,16 +354,18 @@ void FilterCacheManager::update_cache_and_heap(std::map<uint32_t, uint16_t>& lev
     while (level_it != level_recorder.end() && range_it != segment_ranges_recorder.end()) {
         assert(level_it->first == range_it->first);
 
-        segment_ids.emplace_back(level_it->first);
+        if (level_it->second > 0) {
+            segment_ids.emplace_back(level_it->first);
 
-        std::vector<uint32_t> data;
-        data.emplace_back(level_it->second);
-        for (uint32_t& range_id : range_it->second) {
-            assert(range_id >= 0 && range_id < buckets.size());
-            data.emplace_back(range_id);
-            data.emplace_back(uint32_t(SIGNIFICANT_DIGITS_FACTOR * buckets[range_id].hotness_));
+            std::vector<uint32_t> data;
+            data.emplace_back(level_it->second);
+            for (uint32_t& range_id : range_it->second) {
+                assert(range_id >= 0 && range_id < buckets.size());
+                data.emplace_back(range_id);
+                data.emplace_back(uint32_t(SIGNIFICANT_DIGITS_FACTOR * buckets[range_id].hotness_));
+            }
+            datas.emplace_back(data);
         }
-        datas.emplace_back(data);
 
         level_it ++;
         range_it ++;

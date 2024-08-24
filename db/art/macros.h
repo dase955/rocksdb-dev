@@ -179,7 +179,7 @@ namespace ROCKSDB_NAMESPACE {
 // micros for filter cache
 
 // before model work, we enable DEFAULT_UNITS_NUM units for every segments
-#define DEFAULT_UNITS_NUM 5
+#define DEFAULT_UNITS_NUM 2
 // bits-per-key for every filter unit of every segment, 
 // found default bits-per-key = DEFAULT_UNITS_NUM * BITS_PER_KEY_PER_UNIT = 10
 // equal to primary value of paper benchmark config value
@@ -197,7 +197,7 @@ namespace ROCKSDB_NAMESPACE {
 // visit cnt update bound
 #define VISIT_CNT_UPDATE_BOUND 10
 // filter cache map threshold
-#define FULL_RATE 0.90
+#define FULL_RATE 0.98
 #define READY_RATE 0.70
 
 }  // namespace ROCKSDB_NAMESPACE

@@ -85,9 +85,9 @@ public:
 // 7. if a long period end, use greedy algorithm to solve filter units allocation problem and evaluate old model with this solution. if model doesnt work well, retrain it
 // 8. if model still works well or model already retrained, we predict new ideal units num for current segments, release unnecessary filter units , add necessary filter unit and update FIlterCacheHeap
 // 9. if old segments are merged, remove related filter units from FilterCache and FilterCacheHeap
-// TODO: 10. if new segments are generated, we need to predict ideal units num for them, insert filter units (if cache have space left) and update FIlterCacheHeap.
-// TODO: 11. after one short period end (but current long period not end), estimate current segments' approximate get cnts, then use these estimated get cnts to update FIlterCacheHeap 
-// TODO: 12. before FilterCache becomes full for the first time, just set default units num for every segments and insert filter units for segments
+// TODO: 10. if new segments are generated, we need to predict ideal units num for them, insert filter units (if cache have space left) , calcuate estimated count and update FIlterCacheHeap.
+// 11. after one short period end, estimate current segments' approximate get cnts, then use these estimated get cnts to update FIlterCacheHeap 
+// TODO: 12. before FilterCache becomes full for the first time, just set default units num for every new segments and insert filter units for segments
 // TODO: 13. After FilterCache becomes full for the first time, start a background thread to monitor FitlerCacheHeap and use two-heaps adjustment to optimize FilterCache (this thread never ends)
 class FilterCacheManager {
 private:
@@ -100,21 +100,25 @@ private:
     static uint32_t get_cnt_; // record get cnt in current period, when exceeding PERIOD_COUNT, start next period
     static uint32_t period_cnt_; // record period cnt, if period_cnt_ - last_train_period_ >= TRAIN_PERIODS, start to evaluate or retrain ClfModel
     static uint32_t last_long_period_; // record last short period cnt of last long period
+    static uint32_t last_short_period_; // helper var for update job when one short period ends
     static std::mutex update_mutex_; // guarantee counts records only updated once
     static bool train_signal_; // if true, try to retrain model. we call one background thread to monitor this flag and retrain
     static std::map<uint32_t, uint32_t> last_count_recorder_; // get cnt recorder of segments in last long period
     static std::map<uint32_t, uint32_t> current_count_recorder_; // get cnt recorder of segments in current long period
     static std::mutex count_mutex_; // guarentee last_count_recorder and current_count_recorder treated orderedly
+    static bool is_ready_; // check whether ready to use adaptive filter assignment
 public:
-    FilterCacheManager() { get_cnt_ = 0; train_signal_ = false; };
+    FilterCacheManager() { get_cnt_ = 0; last_long_period_ = 0; last_short_period_ = 0; train_signal_ = false; };
 
     ~FilterCacheManager();
 
+    // TODO: one background thread monitor this func, if return true, call try_retrain_model and update_cache_and_heap at once
     bool need_retrain() { return train_signal_; }
 
     // input segment id and target key, check whether target key exist in this segment 
     // return true when target key may exist (may cause false positive fault)
     // if there is no cache item for this segment, always return true
+    // TODO: normal bloom filter units query, can we put hit_count_recorder outside this func? this will make get opt faster
     bool check_key(const uint32_t& segment_id, const std::string& key);
 
     // add 1 to get cnt of specified segment in current long period
@@ -129,19 +133,21 @@ public:
                                 std::map<uint32_t, std::unordered_map<uint32_t, double>>& inherit_infos_recorder);
 
     // estimate approximate get cnts for every alive segment
-    void estimate_count(std::map<uint32_t, uint32_t>& approximate_counts_recorder);
+    void estimate_counts_for_all(std::map<uint32_t, uint32_t>& approximate_counts_recorder);
 
     // noticed that at the beginning, heat buckets need to sample put keys to init itself before heat buckets start to work
     // segment_info_recorder is external variable that records every alive segments' min key and max key
     // it is like { segment 1: [min_key_1, max_key_1], segment 2: [min_key_2, max_key_2], ... }
     // return true when heat_buckets is ready, so no need to call this func again
+    // TODO: remember to be called when receiving put opt. Normally, we can make heat_buckets_ ready before YCSB load end, so we can use it in YCSB testing phase
     bool make_heat_buckets_ready(const std::string& key, std::unordered_map<uint32_t, std::vector<std::string>>& segment_info_recorder);
 
     // add 1 to get cnt of target key range for every get operation
     // update short periods if get cnt exceeds PERIOD_COUNT
     // every get opt will make add 1 to only one heat bucket counter 
     // also need to update count records if one long period end
-    // TODO: we should call one thread to exec this func, reducing tail latency
+    // also need to re-calcuate estimated count of current segments and update FilterCacheHeap if one short period end
+    // TODO: we should call one background thread to exec this func, reducing tail latency
     void hit_heat_buckets(const std::string& key);
 
     // if one long period end, we need to check effectiveness of model. 
@@ -154,8 +160,9 @@ public:
     // level_recorder: { segment 1: level_1, segment 2: level_2, ... }, level_k is the index of LSM-Tree level (0, 1, 2, ...)
     // range_heat_recorder: { segment 1: range_id_1, ...}, ... },
     // unit_size_recorder: { segment 1: unit_size_1, segment 2: unit_size_2, ... }
-    // Attention: we assume for every segment, its ranges in range_heat_recorder value must be unique!!!
+    // we assume for every segment, its ranges in range_heat_recorder value must be unique!!!
     // all 3 recorders need to maintain all current segments info, and their keys size and keys set should be the same (their keys are segment ids)
+    // we ignore all level 0 segments !!!
     // TODO 1: because of the time cost of writing csv file, we need to do this func with a background thread
     // TODO 2: need real benchmark data to debug this func
     void try_retrain_model(std::map<uint32_t, uint16_t>& level_recorder,
@@ -164,6 +171,7 @@ public:
 
     // after one long period end, we may retrain model. when try_retrain_model func end, we need to predict units num for every segments
     // then use these units num to update FilterCache, at last update units num limit in FilterCacheHeap
+    // we ignore all level 0 segments !!!
     // TODO: only be called after try_retrain_model (should be guaranteed)
     // TODO: we can guarantee this by putting try_retrain_model and update_cache into one background thread
     void update_cache_and_heap(std::map<uint32_t, uint16_t>& level_recorder,
@@ -173,4 +181,29 @@ public:
     // also remove related items in FilterCacheHeap
     // TODO: should be called by one background thread
     void remove_segments(std::vector<uint32_t>& segment_ids);
+
+    // insert new segments into cache
+    // all level 0 segments must enable all filter units
+    // if is_ready_ is not true, set default filter units num (except level 0), insert into filter_cache_ and heaps
+    // if is_ready_ is true, predict filter units num and insert necessary filter units as much as possible
+    // then insert into heaps
+    // for level 0 segments, we only need to insert all units into cache, dont insert any nodes into heaps
+    // that means level 0 segments units num never be modified
+    // merged_segment_ids can be null when new segments in level 0
+    // TODO: should be called by one background thread!
+    void insert_segments(std::vector<uint32_t>& merged_segment_ids, std::vector<uint32_t>& new_segment_ids,
+                         std::map<uint32_t, std::unordered_map<uint32_t, double>>& inherit_infos_recorder,
+                         std::map<uint32_t, uint16_t>& level_recorder,
+                         std::map<uint32_t, std::vector<uint32_t>>& segment_ranges_recorder);
+
+    // make filter unit adjustment based on two heaps (benefit of enabling one unit & cost of disabling one unit)
+    // simply, we disable one unit of one segment and enable one unit of another segment and guarantee cost < benefit
+    // dont mind these two units size are not equal
+    // in YCSB Benchmark, sizes of filter units are very close
+    // return true when we successfully make one adjustment
+    // return false when we cannot make one adjustment
+    // TODO: one background should exec this func and never stop
+    bool adjust_cache_and_heap();
 };
+
+}
