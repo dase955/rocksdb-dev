@@ -245,9 +245,11 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname,
       atomic_flush_install_cv_(&mutex_) {
 // WaLSM+
 #ifdef ART_PLUS
+  /*
   get_cnt_ = 0;
   period_cnt_ = 0;
   last_train_period_ = 0;
+  */
 #endif
   
   // !batch_per_trx_ implies seq_per_batch_ because it is only unset for
@@ -1758,6 +1760,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
   std::string art_key(key.data(), key.size());
 #ifdef ART_PLUS
   // ready to estimate hotness, update heat buckets
+  /*
   if (heat_buckets_.is_ready()) {
     get_cnt_ += 1;
     if (get_cnt_ >= PERIOD_COUNT) {
@@ -1794,11 +1797,12 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
 
       std::vector<std::vector<uint32_t>> datas;
       std::vector<uint16_t> tags;
+      std::vector<uint32_t> get_cnts;
       std::vector<uint16_t> preds;
 
       // std::thread train_thread(make_train, clf_model_, datas, tags);
 		  // train_thread.detach();	
-      clf_model_.make_train(datas, tags);
+      clf_model_.make_train(datas, tags, get_cnts);
 
       clf_model_.make_predict(datas, preds);
 
@@ -1824,6 +1828,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
       filter_cache_heap_manager_.debug();
     }    
   }
+  */
 
 #endif
   done = global_memtable_->Get(art_key, *get_impl_options.value->GetSelf(), &s);

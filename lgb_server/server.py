@@ -27,7 +27,9 @@ class LGBhandler(socketserver.BaseRequestHandler):
                 decoded = utils.parse_msg(msg)
                 if type(decoded) is str: # mean it is train msg
                     # send client nothing
-                    clf.train(decoded)
+                    result = clf.train(decoded).encode('UTF-8')
+                    # result is a simple str, just means training end
+                    self.request.send(result)
                 elif type(decoded) is list: # mean it is pred msg, need to send client predict result
                     # print(decoded)
                     decoded = utils.prepare_data(decoded)

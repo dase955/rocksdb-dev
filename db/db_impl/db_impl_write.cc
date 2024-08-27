@@ -23,10 +23,12 @@ Status DBImpl::Put(const WriteOptions& o, ColumnFamilyHandle* column_family,
 // WaLSM+: first sample put keys into pool, then generate key ranges for computing hotness
 #ifdef ART_PLUS
   // heat_buckets not ready, still sample into pool
+  /*
   if (!heat_buckets_.is_ready()) {
     std::string art_key(key.data(), key.size());
     heat_buckets_.sample(art_key, segments_info_);
   }
+  */
 #endif
   return DB::Put(o, column_family, key, val);
 }

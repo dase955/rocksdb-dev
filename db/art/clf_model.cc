@@ -39,6 +39,7 @@ void ClfModel::write_debug_dataset() {
         header.emplace_back("Hotness_" + std::to_string(i));
     }
     header.emplace_back("Target");
+    header.emplace_back("Count");
     rows.emplace_back(header);
 
     // ready for shuffling
@@ -52,10 +53,12 @@ void ClfModel::write_debug_dataset() {
         // std::vector<double> value;
         std::vector<std::string> values;
         uint32_t level = i / 200;
-        uint32_t target = 5 - level;
+        uint16_t target = 5 - level;
+        uint32_t count = (1000 - i) * 100;
         float r = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
         if (r > 0.10 * level) {
             target -= 1;
+            count -= 100;
         }
 
         auto seed = std::chrono::system_clock::now().time_since_epoch().count();
@@ -65,8 +68,9 @@ void ClfModel::write_debug_dataset() {
             values.emplace_back(std::to_string(ids[j]));
             values.emplace_back(std::to_string(uint32_t(SIGNIFICANT_DIGITS_FACTOR * hotness_map[ids[j]])));
         }
-        values.emplace_back(std::to_string(target));
-        assert(values.size() == feature_num_ + 1);
+        values.emplace_back(std::to_string(target)); // Target column
+        values.emplace_back(std::to_string(count)); // Count column
+        assert(values.size() == feature_num_ + 2);
         rows.emplace_back(values);
     }
 
@@ -74,11 +78,12 @@ void ClfModel::write_debug_dataset() {
     stream.close();
 }
 
-void ClfModel::write_real_dataset(std::vector<std::vector<uint32_t>>& datas, std::vector<uint16_t>& tags) {
+void ClfModel::write_real_dataset(std::vector<std::vector<uint32_t>>& datas, std::vector<uint16_t>& tags, std::vector<uint32_t>& get_cnts) {
     assert(feature_num_ > 0);
     // tags is real class of all segments, 
     // we also need to write these tags to dataset besides features
     assert(datas.size()==tags.size());
+    assert(datas.size()==get_cnts.size());
     // ready for writer
     std::ofstream stream(dataset_path_);
     csv2::Writer<csv2::delimiter<','>> writer(stream);
@@ -95,6 +100,7 @@ void ClfModel::write_real_dataset(std::vector<std::vector<uint32_t>>& datas, std
     // remind that targeted class is in csv Target column
     // corresponding to code of lgb.py in ../models dir
     header.emplace_back("Target");
+    header.emplace_back("Count");
     rows.emplace_back(header);
 
     std::vector<std::string> values;
@@ -106,9 +112,10 @@ void ClfModel::write_real_dataset(std::vector<std::vector<uint32_t>>& datas, std
         for (uint32_t& value : data) {
             values.emplace_back(std::to_string(value));
         }
-        // remember to write real tag to dataset
-        values.emplace_back(std::to_string(tags[idx++]));
-        assert(values.size() == feature_num_ + 1);
+        // remember to write real tag and get cnt to dataset
+        values.emplace_back(std::to_string(tags[idx]));
+        values.emplace_back(std::to_string(get_cnts[idx++]));
+        assert(values.size() == feature_num_ + 2);
         rows.emplace_back(values);
     }
 
@@ -116,7 +123,7 @@ void ClfModel::write_real_dataset(std::vector<std::vector<uint32_t>>& datas, std
     stream.close();
 }
 
-void ClfModel::write_dataset(std::vector<std::vector<uint32_t>>& datas, std::vector<uint16_t>& tags) {
+void ClfModel::write_dataset(std::vector<std::vector<uint32_t>>& datas, std::vector<uint16_t>& tags, std::vector<uint32_t>& get_cnts) {
     assert(feature_num_ > 0);
     if (datas.empty()) {
         write_debug_dataset();
@@ -126,14 +133,14 @@ void ClfModel::write_dataset(std::vector<std::vector<uint32_t>>& datas, std::vec
 
     assert(feature_num_ % 2 != 0); // features num: 2r + 1 
 
-    write_real_dataset(datas, tags);
+    write_real_dataset(datas, tags, get_cnts);
     // dataset_cnt_ += 1;
     return;
 }
 
-void ClfModel::make_train(std::vector<std::vector<uint32_t>>& datas, std::vector<uint16_t>& tags) {
+void ClfModel::make_train(std::vector<std::vector<uint32_t>>& datas, std::vector<uint16_t>& tags, std::vector<uint32_t>& get_cnts) {
     assert(feature_num_ > 0);
-    write_dataset(datas, tags);
+    write_dataset(datas, tags, get_cnts);
 
     // already write dataset
     // send msg to LightGBM server, let server read dataset and train new model
@@ -141,7 +148,10 @@ void ClfModel::make_train(std::vector<std::vector<uint32_t>>& datas, std::vector
     std::string message = TRAIN_PREFIX + dataset_name_;
     // already write dataset, send dataset path to server
     // should not receive any message from server
+    std::string recv_buffer;
+    recv_buffer.resize(buffer_size_);
     sock << message;
+    sock >> recv_buffer; // wait for training end
     // will destroy sock when leaving this func scope
 }
 
@@ -167,10 +177,11 @@ void ClfModel::make_predict_samples(std::vector<std::vector<uint32_t>>& datas) {
                 data.emplace_back(stoul(value));
             }
             // remind that csv reader will read a empty row in the end, that is why !data.empty()
-            // csv file last column is real tag
+            // csv file last two column is real tag and get cnt
             // we need to pop out last column
             if (!data.empty()) {
-                data.pop_back();
+                data.pop_back(); // pop out get cnt
+                data.pop_back(); // pop out real tag
             }
             assert(data.size() == feature_num_);
             datas.emplace_back(data);
@@ -184,6 +195,7 @@ void ClfModel::make_real_predict(std::vector<std::vector<uint32_t>>& datas, std:
     std::string message, recv_buffer;
     for (std::vector<uint32_t>& data : datas) {
         if (!data.empty()) {
+            prepare_data(data);
             message.clear();
             recv_buffer.clear();
             recv_buffer.resize(buffer_size_);

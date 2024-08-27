@@ -41,6 +41,7 @@ public:
 */
 class HeatBuckets {
 private:
+    // TODO: mutex can be optimized
     static std::vector<std::string> seperators_;
     static std::vector<Bucket> buckets_;
     static uint32_t current_cnt_; // current get count in this period
