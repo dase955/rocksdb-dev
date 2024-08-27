@@ -32,24 +32,30 @@ class FilterCache {
 private:
     std::map<uint32_t, FilterCacheItem> filter_cache_;
     uint32_t used_space_size_;
+    uint32_t level_0_used_space_size_;
     uint32_t cache_size_; // max size of cache
     std::mutex filter_cache_mutex_;
 
 public:
-    FilterCache() { filter_cache_.clear(); cache_size_ = CACHE_SPACE_SIZE; used_space_size_ = 0; }
+    FilterCache() { filter_cache_.clear(); cache_size_ = CACHE_SPACE_SIZE; used_space_size_ = 0; level_0_used_space_size_ = 0; }
 
     ~FilterCache() { /* do nothing */ }
+
+    // other levels total cache size 
+    uint32_t cache_size_except_level_0() { return cache_size_ * FULL_RATE - level_0_used_space_size_; }
 
     // check whether one given key exist in one segment
     bool check_key(const uint32_t& segment_id, const std::string& key);
 
     // enable / disable units for a batch of segments (one segment may not exist in FilterCache)
     // if enabled units num exceed given units num, it will disable units
-    void enable_for_segments(std::unordered_map<uint32_t, uint16_t>& segment_units_num_recorder);
+    void enable_for_segments(std::unordered_map<uint32_t, uint16_t>& segment_units_num_recorder, const bool& is_forced,
+                             std::set<uint32_t>& level_0_segment_ids, std::set<uint32_t>& failed_segment_ids);
 
     // the only difference from enable_for_segments is:
     // this func dont insert any filter units for segments that dont exist in cache, but enable_for_segments unc does
-    void update_for_segments(std::unordered_map<uint32_t, uint16_t>& segment_units_num_recorder);
+    void update_for_segments(std::unordered_map<uint32_t, uint16_t>& segment_units_num_recorder, const bool& is_forced,
+                             std::set<uint32_t>& level_0_segment_ids, std::set<uint32_t>& failed_segment_ids);
 
     // check whether filter cache is approximately full
     // actually, we will leave (1-FULL_RATE) * cache_size_ space for emergency usage
@@ -59,22 +65,11 @@ public:
     bool is_ready();
 
     // release filter units of merged segments
-    void release_for_segments(std::vector<uint32_t>& segment_ids);
+    void release_for_segments(std::vector<uint32_t>& segment_ids, std::set<uint32_t>& level_0_segment_ids);
 };
 
-// FilterCacheManager主体为FilterCache
-// 其为一个Map，Key为segment id，Value为一个Segment的Filter Units的相关结构，其能自行启用/禁用Unit，并可以输入key判断存在性
-// 其次还需维护HeatBuckets、FilterCacheHeapManager、ClfModel
-// 功能如下：
-// 1. 实时记录每一个可用的Segment的访问频数来更新周期
-// 2. 根据周期更新HeatBuckets和ClfModel
-// 3. 一旦更新ClfModel，重新预测并对FilterCacheHeapManager里的Heap进行更新 (工作负载发生改变)
-// 4. 如果有旧的Segment被合并，同时必须有新的Segment，新的Segment将继承其访问频数
-// 5. 新的Segment将用ClfModel预测并插入到FilterCacheHeapManager里的Heap中，先尽量插入unit，后台的Heap会自动调整，来为新的Segment自适应启用Units
-// 6. 同时维护上一个大周期的访问频数，一旦这个周期里Segment被合并，其访问频数会继承到子Segment上
-
 // FilterCacheManager is combined of these components:
-// HeatBuckets, ClfModel, FilterCacheHeapManager, ...
+// HeatBuckets, ClfModel, FilterCacheHeapManager, GreedyAlgo and FilterCache
 // its work is below:
 // 1. input segment id and target key, check whether target key exist in this segment 
 // 2. if one check done, add 1 to the get cnt of this segment. we need to maintain get cnts record in last long period and current long period
@@ -85,10 +80,10 @@ public:
 // 7. if a long period end, use greedy algorithm to solve filter units allocation problem and evaluate old model with this solution. if model doesnt work well, retrain it
 // 8. if model still works well or model already retrained, we predict new ideal units num for current segments, release unnecessary filter units , add necessary filter unit and update FIlterCacheHeap
 // 9. if old segments are merged, remove related filter units from FilterCache and FilterCacheHeap
-// TODO: 10. if new segments are generated, we need to predict ideal units num for them, insert filter units (if cache have space left) , calcuate estimated count and update FIlterCacheHeap.
+// 10. if new segments are generated, we need to predict ideal units num for them, insert filter units (if cache have space left) , calcuate estimated count and update FIlterCacheHeap.
 // 11. after one short period end, estimate current segments' approximate get cnts, then use these estimated get cnts to update FIlterCacheHeap 
-// TODO: 12. before FilterCache becomes full for the first time, just set default units num for every new segments and insert filter units for segments
-// TODO: 13. After FilterCache becomes full for the first time, start a background thread to monitor FitlerCacheHeap and use two-heaps adjustment to optimize FilterCache (this thread never ends)
+// 12. before FilterCache becomes full for the first time, just set default units num for every new segments and insert filter units for segments
+// 13. After FilterCache becomes full for the first time, start a background thread to monitor FitlerCacheHeap and use two-heaps adjustment to optimize FilterCache (this thread never ends)
 class FilterCacheManager {
 private:
     // TODO: mutex can be optimized or use a message queue or a thread pool to reduce time costed by mutex
@@ -108,12 +103,16 @@ private:
     static std::mutex count_mutex_; // guarentee last_count_recorder and current_count_recorder treated orderedly
     static bool is_ready_; // check whether ready to use adaptive filter assignment
 public:
-    FilterCacheManager() { get_cnt_ = 0; last_long_period_ = 0; last_short_period_ = 0; train_signal_ = false; };
+    FilterCacheManager() { get_cnt_ = 0; last_long_period_ = 0; last_short_period_ = 0; train_signal_ = false; }
 
     ~FilterCacheManager();
 
-    // TODO: one background thread monitor this func, if return true, call try_retrain_model and update_cache_and_heap at once
+    // TODO: one background thread monitor this func, if return true, call try_retrain_model at once, wait for training end, and call update_cache_and_heap
     bool need_retrain() { return train_signal_; }
+
+    // TODO: one background thread monitor this func, if return true, call try_retrain_model at once and wait for training end. then call update_cache_and_heap
+    // TODO: if training end, stop this thread, because if is_ready_ is true, is_ready_ will never change to false
+    bool ready_work() { return is_ready_; }
 
     // input segment id and target key, check whether target key exist in this segment 
     // return true when target key may exist (may cause false positive fault)
@@ -129,7 +128,7 @@ public:
 
     // inherit counts of merged segments to counts of new segments and remove counts of merged segments
     // inherit_infos_recorder: { {new segment 1: [{old segment 1: inherit rate 1}, {old segment 2: inherit rate 2}, ...]}, ...}
-    void inherit_count_recorder(std::vector<uint32_t>& merged_segment_ids, std::vector<uint32_t>& new_segment_ids,
+    void inherit_count_recorder(std::vector<uint32_t>& merged_segment_ids, std::vector<uint32_t>& new_segment_ids, const uint32_t& level_0_base_count,
                                 std::map<uint32_t, std::unordered_map<uint32_t, double>>& inherit_infos_recorder);
 
     // estimate approximate get cnts for every alive segment
@@ -161,10 +160,10 @@ public:
     // range_heat_recorder: { segment 1: range_id_1, ...}, ... },
     // unit_size_recorder: { segment 1: unit_size_1, segment 2: unit_size_2, ... }
     // we assume for every segment, its ranges in range_heat_recorder value must be unique!!!
-    // all 3 recorders need to maintain all current segments info, and their keys size and keys set should be the same (their keys are segment ids)
+    // all 3 recorders need to maintain all current segments info, and their keys size and keys set should be the same (their keys are alive segments' ids)
     // we ignore all level 0 segments !!!
-    // TODO 1: because of the time cost of writing csv file, we need to do this func with a background thread
-    // TODO 2: need real benchmark data to debug this func
+    // TODO: because of the time cost of writing csv file, we need to do this func with a background thread
+    // TODO: need real benchmark data to debug this func
     void try_retrain_model(std::map<uint32_t, uint16_t>& level_recorder,
                            std::map<uint32_t, std::vector<uint32_t>>& segment_ranges_recorder,
                            std::map<uint32_t, uint32_t>& unit_size_recorder);
@@ -172,15 +171,22 @@ public:
     // after one long period end, we may retrain model. when try_retrain_model func end, we need to predict units num for every segments
     // then use these units num to update FilterCache, at last update units num limit in FilterCacheHeap
     // we ignore all level 0 segments !!!
+    // level_recorder: { segment 1: level_1, segment 2: level_2, ... }, level_k is the index of LSM-Tree level (0, 1, 2, ...)
+    // range_heat_recorder: { segment 1: range_id_1, ...}, ... },
+    // noticed that we only pick up those segments that are in both level_recorder and segment_ranges_recorder
+    // and update their filter units in filter cache and nodes in heap
+    // so level_recorder keys set and segment_ranges_recorder keys set can be different
     // TODO: only be called after try_retrain_model (should be guaranteed)
-    // TODO: we can guarantee this by putting try_retrain_model and update_cache into one background thread
+    // TODO: we can guarantee this by putting try_retrain_model and update_cache_and_heap into one background thread
     void update_cache_and_heap(std::map<uint32_t, uint16_t>& level_recorder,
                                std::map<uint32_t, std::vector<uint32_t>>& segment_ranges_recorder);
 
     // remove merged segments' filter units in the filter cache
     // also remove related items in FilterCacheHeap
+    // segment_ids: [level_1_segment_1, level_0_segment_1, ...]
+    // level_0_segment_ids: [level_0_segment_1, ...]
     // TODO: should be called by one background thread
-    void remove_segments(std::vector<uint32_t>& segment_ids);
+    void remove_segments(std::vector<uint32_t>& segment_ids, std::set<uint32_t>& level_0_segment_ids);
 
     // insert new segments into cache
     // all level 0 segments must enable all filter units
@@ -190,10 +196,21 @@ public:
     // for level 0 segments, we only need to insert all units into cache, dont insert any nodes into heaps
     // that means level 0 segments units num never be modified
     // merged_segment_ids can be null when new segments in level 0
+    // level_0_base_count is the default value of level 0 segments' count in current recorder and last recorder
+    // noticed that level 0 segments are from MemTable, we can compute total memtable get count and let the total count divided by new level 0 segments num
+    // it equals to the avg count of new level 0 segments. we use this avg count to simply init level 0 segments' counts in current recorder and last recorder
+    // merged_segment_ids: all merged segments' id
+    // new_segment_ids: all new segments' id
+    // inherit_infos_recorder: count inherit information (from merged segments to new segments), see inherit_count_recorder func
+    // level_recorder: include merged segments and new segments, like { segment 1 : level_num_1, ... }
+    // level_0_base_count: the initial count in last recorder and current recorder of new level 0 segments
+    // segment_ranges_recorder: only include new segments, see update_cache_and_heap
+    // level_recorder keys set and segment_ranges_recorder keys set can be different
+    // but should ensure all new segments are in both level_recorder and segment_ranges_recorder
     // TODO: should be called by one background thread!
     void insert_segments(std::vector<uint32_t>& merged_segment_ids, std::vector<uint32_t>& new_segment_ids,
                          std::map<uint32_t, std::unordered_map<uint32_t, double>>& inherit_infos_recorder,
-                         std::map<uint32_t, uint16_t>& level_recorder,
+                         std::map<uint32_t, uint16_t>& level_recorder, const uint32_t& level_0_base_count,
                          std::map<uint32_t, std::vector<uint32_t>>& segment_ranges_recorder);
 
     // make filter unit adjustment based on two heaps (benefit of enabling one unit & cost of disabling one unit)

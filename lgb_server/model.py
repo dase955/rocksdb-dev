@@ -47,7 +47,7 @@ class LGBModel():
         # print("best cost : " + str(best_cost) + ", pred cost: " + str(pred_cost))
         return math.fabs((pred_cost-best_cost)/best_cost) < self.__rate_per_unit
         
-    def train(self, dataset: str) -> None:
+    def train(self, dataset: str) -> str:
         df = pd.read_csv(dataset)
         y = df['Target']
         c = df['Count'] # used to check I/O cost metric
@@ -63,6 +63,7 @@ class LGBModel():
         clf.booster_.save_model(model_path + self.__model_name)
         self.__model = lightgbm.Booster(model_file=model_path+self.__model_name)
         # print('load a new model')
+        return 'new model trained'
         
     def predict(self, datas: pd.DataFrame) -> str:
         # currently, only support one data row

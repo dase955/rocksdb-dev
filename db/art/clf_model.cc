@@ -148,7 +148,10 @@ void ClfModel::make_train(std::vector<std::vector<uint32_t>>& datas, std::vector
     std::string message = TRAIN_PREFIX + dataset_name_;
     // already write dataset, send dataset path to server
     // should not receive any message from server
+    std::string recv_buffer;
+    recv_buffer.resize(buffer_size_);
     sock << message;
+    sock >> recv_buffer; // wait for training end
     // will destroy sock when leaving this func scope
 }
 

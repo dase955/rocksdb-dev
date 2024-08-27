@@ -1903,6 +1903,7 @@ class DBImpl : public DB {
   HeatGroupManager* group_manager_;
 
 #ifdef ART_PLUS
+  /*
   HeatBuckets heat_buckets_;
 
   ClfModel clf_model_;
@@ -1923,6 +1924,7 @@ class DBImpl : public DB {
 
   // train mutex, preventing model trained more than one time
   std::mutex train_mutex_;
+  */
 #endif
   // Offset of last record written by leader writer.
   uint64_t last_record_offset_;
