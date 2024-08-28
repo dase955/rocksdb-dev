@@ -162,8 +162,12 @@ namespace ROCKSDB_NAMESPACE {
 // the path to save model txt file and train dataset csv file
 #define MODEL_PATH "/pg_wal/ycc/" 
 // we cannot send hotness value (double) to model side, 
-// so we try multiple hotness value by SIGNIFICANT_DIGITS_FACTOR, then send its integer part to model
-#define SIGNIFICANT_DIGITS_FACTOR 1e6 
+// so we try multiple hotness value by HOTNESS_SIGNIFICANT_DIGITS_FACTOR, then send its integer part to model
+// also we need to multiple key range rate by RATE_SIGNIFICANT_DIGITS_FACTOR
+#define HOTNESS_SIGNIFICANT_DIGITS_FACTOR 1e6 
+#define RATE_SIGNIFICANT_DIGITS_FACTOR 1e3
+// model feature num max limit : 3 * 30 + 1
+#define MAX_FEATURES_NUM 91
 
 // config micro connecting to LightGBM server 
 
@@ -171,7 +175,7 @@ namespace ROCKSDB_NAMESPACE {
 #define HOST "127.0.0.1"
 #define PORT "9090"
 // max size of socket receive buffer size
-#define BUFFER_SIZE 8
+#define BUFFER_SIZE 1024
 // socket message prefix
 #define TRAIN_PREFIX "t "
 #define PREDICT_PREFIX "p "

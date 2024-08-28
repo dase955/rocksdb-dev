@@ -138,6 +138,7 @@ bool FilterCacheManager::make_heat_buckets_ready(const std::string& key,
         }
         heat_buckets_.sample(key, segments_infos);
     }
+    return heat_buckets_.is_ready();
 }
 
 void FilterCacheManager::hit_heat_buckets(const std::string& key) {
@@ -176,8 +177,14 @@ void FilterCacheManager::hit_heat_buckets(const std::string& key) {
     }
 }
 
+bool FilterCacheManager::make_clf_model_ready(std::vector<uint16_t>& features_nums) {
+    clf_model_.make_ready(features_nums);
+    return clf_model_.is_ready();
+}
+
 bool FilterCacheManager::check_key(const uint32_t& segment_id, const std::string& key) {
-    hit_count_recorder(segment_id); // one get opt will cause query to many segments.
+    // move hit_count_recorder to a background thread
+    // hit_count_recorder(segment_id); // one get opt will cause query to many segments.
     // so one get opt only call one hit_heat_buckets, but call many hit_count_recorder
     return filter_cache_.check_key(segment_id, key);
 }
@@ -285,7 +292,7 @@ void FilterCacheManager::estimate_counts_for_all(std::map<uint32_t, uint32_t>& a
 
 
 void FilterCacheManager::try_retrain_model(std::map<uint32_t, uint16_t>& level_recorder,
-                                           std::map<uint32_t, std::vector<uint32_t>>& segment_ranges_recorder,
+                                           std::map<uint32_t, std::vector<RangeRatePair>>& segment_ranges_recorder,
                                            std::map<uint32_t, uint32_t>& unit_size_recorder) {
     // we should guarantee these 3 external recorder share the same keys set
     // we need to do this job outside FilterCacheManager
@@ -347,28 +354,29 @@ void FilterCacheManager::try_retrain_model(std::map<uint32_t, uint16_t>& level_r
     std::vector<uint32_t> get_cnts;
 
     auto level_it = level_recorder.begin(); // key range id start with 0
-    auto ranges_it = segment_ranges_recorder.begin();
+    auto range_it = segment_ranges_recorder.begin();
     auto count_it = last_count_recorder_.begin();
     auto label_it = label_recorder.begin();
-    while (level_it != level_recorder.end() && ranges_it != segment_ranges_recorder.end() &&
+    while (level_it != level_recorder.end() && range_it != segment_ranges_recorder.end() &&
            count_it != last_count_recorder_.end() && label_it != label_recorder.end()) {
-        assert(level_it->first == ranges_it->first);
+        assert(level_it->first == range_it->first);
         assert(level_it->first == label_it->first);
         if (count_it->first < level_it->first) {
             count_it ++;
         } else if (count_it->first > level_it->first) {
             level_it ++;
-            ranges_it ++;
+            range_it ++;
             label_it ++;
         } else {
             if (level_it->second > 0) {
                 // add data row
                 std::vector<uint32_t> data;
+                std::sort((range_it->second).begin(), (range_it->second).end(), RangeRatePairGreatorComparor);
                 data.emplace_back(level_it->second);
-                for (uint32_t& range_id : ranges_it->second) {
-                    assert(range_id >= 0 && range_id < buckets.size());
-                    data.emplace_back(range_id);
-                    data.emplace_back(uint32_t(SIGNIFICANT_DIGITS_FACTOR * buckets[range_id].hotness_));
+                for (RangeRatePair& pair : range_it->second) {
+                    assert(pair.range_id >= 0 && pair.range_id < buckets.size());
+                    data.emplace_back(uint32_t(RATE_SIGNIFICANT_DIGITS_FACTOR * pair.rate_in_segment));
+                    data.emplace_back(uint32_t(HOTNESS_SIGNIFICANT_DIGITS_FACTOR * buckets[pair.range_id].hotness_));
                 }
                 datas.emplace_back(data);
                 // add label row
@@ -378,7 +386,7 @@ void FilterCacheManager::try_retrain_model(std::map<uint32_t, uint16_t>& level_r
             }
 
             level_it ++;
-            ranges_it ++;
+            range_it ++;
             label_it ++;
         }
     }
@@ -389,7 +397,7 @@ void FilterCacheManager::try_retrain_model(std::map<uint32_t, uint16_t>& level_r
 }
 
 void FilterCacheManager::update_cache_and_heap(std::map<uint32_t, uint16_t>& level_recorder,
-                                               std::map<uint32_t, std::vector<uint32_t>>& segment_ranges_recorder) {
+                                               std::map<uint32_t, std::vector<RangeRatePair>>& segment_ranges_recorder) {
     assert(level_recorder.size() == segment_ranges_recorder.size());
     std::vector<uint32_t> segment_ids;
     std::vector<std::vector<uint32_t>> datas;
@@ -410,14 +418,14 @@ void FilterCacheManager::update_cache_and_heap(std::map<uint32_t, uint16_t>& lev
             assert(level_it->first == range_it->first);
 
             if (level_it->second > 0) {
-                segment_ids.emplace_back(level_it->first);
-
+                // add data row
                 std::vector<uint32_t> data;
+                std::sort((range_it->second).begin(), (range_it->second).end(), RangeRatePairGreatorComparor);
                 data.emplace_back(level_it->second);
-                for (uint32_t& range_id : range_it->second) {
-                    assert(range_id >= 0 && range_id < buckets.size());
-                    data.emplace_back(range_id);
-                    data.emplace_back(uint32_t(SIGNIFICANT_DIGITS_FACTOR * buckets[range_id].hotness_));
+                for (RangeRatePair& pair : range_it->second) {
+                    assert(pair.range_id >= 0 && pair.range_id < buckets.size());
+                    data.emplace_back(uint32_t(RATE_SIGNIFICANT_DIGITS_FACTOR * pair.rate_in_segment));
+                    data.emplace_back(uint32_t(HOTNESS_SIGNIFICANT_DIGITS_FACTOR * buckets[pair.range_id].hotness_));
                 }
                 datas.emplace_back(data);
             }
@@ -485,7 +493,7 @@ bool FilterCacheManager::adjust_cache_and_heap() {
 void FilterCacheManager::insert_segments(std::vector<uint32_t>& merged_segment_ids, std::vector<uint32_t>& new_segment_ids,
                                          std::map<uint32_t, std::unordered_map<uint32_t, double>>& inherit_infos_recorder,
                                          std::map<uint32_t, uint16_t>& level_recorder, const uint32_t& level_0_base_count,
-                                         std::map<uint32_t, std::vector<uint32_t>>& segment_ranges_recorder) {
+                                         std::map<uint32_t, std::vector<RangeRatePair>>& segment_ranges_recorder) {
     std::unordered_map<uint32_t, uint16_t> segment_units_num_recorder;
     std::map<uint32_t, uint32_t> approximate_counts_recorder;
     std::set<uint32_t> failed_segment_ids;
@@ -580,10 +588,10 @@ void FilterCacheManager::insert_segments(std::vector<uint32_t>& merged_segment_i
 
                 std::vector<uint32_t> pred_data;
                 pred_data.emplace_back(level_recorder[new_segment_id]);
-                for (uint32_t& range_id : segment_ranges_recorder[new_segment_id]) {
-                    assert(range_id >= 0 && range_id < buckets.size());
-                    pred_data.emplace_back(range_id);
-                    pred_data.emplace_back(uint32_t(SIGNIFICANT_DIGITS_FACTOR * buckets[range_id].hotness_));
+                for (RangeRatePair& pair : segment_ranges_recorder[new_segment_id]) {
+                    assert(pair.range_id >= 0 && pair.range_id < buckets.size());
+                    pred_data.emplace_back(uint32_t(RATE_SIGNIFICANT_DIGITS_FACTOR * pair.rate_in_segment));
+                    pred_data.emplace_back(uint32_t(HOTNESS_SIGNIFICANT_DIGITS_FACTOR * buckets[pair.range_id].hotness_));
                 }
                 pred_datas.emplace_back(pred_data);
             }

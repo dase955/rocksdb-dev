@@ -35,7 +35,7 @@ void ClfModel::write_debug_dataset() {
     std::vector<std::string> header;
     header.emplace_back("Level");
     for (int i = 0; i < 20; i ++) {
-        header.emplace_back("Range_" + std::to_string(i));
+        header.emplace_back("Rate_" + std::to_string(i));
         header.emplace_back("Hotness_" + std::to_string(i));
     }
     header.emplace_back("Target");
@@ -65,8 +65,8 @@ void ClfModel::write_debug_dataset() {
         std::shuffle(ids.begin(), ids.end(), std::default_random_engine(seed));
         values.emplace_back(std::to_string(level));
         for (int j = 0; j < 20; j ++) {
-            values.emplace_back(std::to_string(ids[j]));
-            values.emplace_back(std::to_string(uint32_t(SIGNIFICANT_DIGITS_FACTOR * hotness_map[ids[j]])));
+            values.emplace_back(std::to_string(uint32_t(ids[j] * 0.005 * RATE_SIGNIFICANT_DIGITS_FACTOR)));
+            values.emplace_back(std::to_string(uint32_t(HOTNESS_SIGNIFICANT_DIGITS_FACTOR * hotness_map[ids[j]])));
         }
         values.emplace_back(std::to_string(target)); // Target column
         values.emplace_back(std::to_string(count)); // Count column
@@ -94,7 +94,7 @@ void ClfModel::write_real_dataset(std::vector<std::vector<uint32_t>>& datas, std
     uint16_t ranges_num = (feature_num_ - 1) / 2;
     header.emplace_back("Level");
     for (int i = 0; i < ranges_num; i ++) {
-        header.emplace_back("Range_" + std::to_string(i));
+        header.emplace_back("Rate_" + std::to_string(i));
         header.emplace_back("Hotness_" + std::to_string(i));
     }
     // remind that targeted class is in csv Target column
