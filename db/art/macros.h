@@ -204,4 +204,7 @@ namespace ROCKSDB_NAMESPACE {
 #define FULL_RATE 0.98
 #define READY_RATE 0.70
 
+// filter cache client background threads num
+#define FILTER_CACHE_THREADS_NUM 10
+
 }  // namespace ROCKSDB_NAMESPACE

@@ -114,6 +114,8 @@ public:
     // TODO: lastly call update_cache_and_heap. if all end, stop this thread, because if is_ready_ is true, is_ready_ will never change to false
     bool ready_work() { return is_ready_; }
 
+    bool heat_buckets_ready() { return heat_buckets_.is_ready(); }
+
     // input segment id and target key, check whether target key exist in this segment 
     // return true when target key may exist (may cause false positive fault)
     // if there is no cache item for this segment, always return true
@@ -177,8 +179,8 @@ public:
     // range_heat_recorder: { segment 1: range_id_1, ...}, ... },
     // unit_size_recorder: { segment 1: unit_size_1, segment 2: unit_size_2, ... }
     // we assume for every segment, its ranges in range_heat_recorder value must be unique!!!
-    // all 3 recorders need to maintain all current segments info, and their keys size and keys set should be the same (their keys are alive segments' ids)
-    // we ignore all level 0 segments !!!
+    // all 3 recorders need to maintain all current non level 0 segments info, and their keys size and keys set should be the same (their keys are segments' ids)
+    // we ignore all level 0 segments !!! 3 recorders keys set should be the same ------ all alive segments' ids (except level 0)
     // TODO: because of the time cost of writing csv file, we need to do this func with a background thread
     // TODO: need real benchmark data to debug this func
     void try_retrain_model(std::map<uint32_t, uint16_t>& level_recorder,
