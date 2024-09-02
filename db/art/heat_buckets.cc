@@ -259,7 +259,7 @@ uint32_t SamplesPool::determine_k(std::vector<std::vector<std::string>>& segment
     uint32_t k = pool_.size() - 2;
     // if segments is empty, use default k to debug
     if (segments.empty()) {
-        k = (pool_.size() - 2) / DEFAULT_BUCKETS;  
+        k = (pool_.size() - 2) / DEFAULT_BUCKETS_NUM;  
     }
     assert(k > 1);
     for (auto& segment : segments) {
@@ -275,10 +275,15 @@ uint32_t SamplesPool::determine_k(std::vector<std::vector<std::string>>& segment
 } 
 
 void HeatBuckets::sample(const std::string& key, std::vector<std::vector<std::string>>& segments) {
-    sample_mutex_.lock();
-    samples_.sample(key);
     if (samples_.is_ready()) {
-        init(segments);
+        return;
+    }
+    sample_mutex_.lock();
+    if (!samples_.is_ready()) {
+        samples_.sample(key);
+        if (samples_.is_ready()) {
+            init(segments);
+        }
     }
     sample_mutex_.unlock();
 }

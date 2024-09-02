@@ -1,4 +1,5 @@
 #include <iostream>
+#include <thread>
 // Use #include "task_thread_pool.hpp" for relative path,
 // and #include <task_thread_pool.hpp> if installed in include path
 #include "task_thread_pool.hpp"
@@ -30,6 +31,17 @@ void outerFunc4() {
     std::cout << "call to outerFunc4: " << (arg) << std::endl;
     return;
 }
+
+class TestClass {
+public:
+    int cnt;
+    TestClass() {
+        cnt = 0;
+    }
+    void add() {
+        cnt ++;
+    }
+};
 
 class ThreadDemo {
 private:
@@ -64,6 +76,22 @@ private:
         return;
     }
 
+    static void testFunc(TestClass*& test) {
+        int cnt = 0;
+        while (cnt++ < 100) {
+            (*test).add();
+            //break;
+        }
+    }
+
+    static void monitor(TestClass*& test) {
+        int cnt = 0;
+        while (cnt++ < 100) {
+            std::cout << (*test).cnt << std::endl;
+            //break;
+        }
+    }
+
 public:
     void thread_test() {
         std::future<bool> func_future_1, func_future_2, func_future_3, func_future_4;
@@ -78,12 +106,27 @@ public:
 
         pool_.wait_for_tasks();
     }
+
+    void test(TestClass* test1) {
+        pool_.pause();
+        pool_.submit_detach(testFunc, test1);
+        pool_.submit_detach(monitor, test1);
+        pool_.submit_detach(testFunc, test1);
+        pool_.submit_detach(monitor, test1);
+        pool_.unpause();
+        // pool_.submit_detach(testFunc, test1);
+        // monitor();
+        // testFunc(test1);
+        // monitor(test1);     
+    }
 };
 
 task_thread_pool::task_thread_pool ThreadDemo::pool_;
 
 int main() {
     ThreadDemo demo;
-    demo.thread_test();
+    TestClass* test1 = new TestClass();
+    // demo.thread_test();
+    demo.test(test1);
     return 0;
 }

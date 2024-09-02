@@ -107,11 +107,11 @@ public:
 
     ~FilterCacheManager();
 
-    // TODO: one background thread monitor this func, if return true, call try_retrain_model at once, wait for training end, and call update_cache_and_heap
+    // one background thread monitor this func, if return true, call try_retrain_model at once, wait for training end, and call update_cache_and_heap
     bool need_retrain() { return train_signal_; }
 
-    // TODO: one background thread monitor this func, if return true, call make_clf_model_ready first, then call try_retrain_model at once and wait for training end. 
-    // TODO: lastly call update_cache_and_heap. if all end, stop this thread, because if is_ready_ is true, is_ready_ will never change to false
+    // one background thread monitor this func, if return true, call make_clf_model_ready first, then call try_retrain_model at once and wait for training end. 
+    // lastly call update_cache_and_heap. if all end, stop this thread, because if is_ready_ is true, is_ready_ will never change to false
     bool ready_work() { return is_ready_; }
 
     bool heat_buckets_ready() { return heat_buckets_.is_ready(); }
@@ -119,15 +119,15 @@ public:
     // input segment id and target key, check whether target key exist in this segment 
     // return true when target key may exist (may cause false positive fault)
     // if there is no cache item for this segment, always return true
-    // TODO: normal bloom filter units query, can we put hit_count_recorder outside this func? this will make get opt faster
-    // TODO: will be called by a get operation, this will block get operation
-    // TODO: remember to call hit_count_recorder in a background thread
+    // normal bloom filter units query, can we put hit_count_recorder outside this func? this will make get opt faster
+    // will be called by a get operation, this will block get operation
+    // remember to call hit_count_recorder in a background thread
     bool check_key(const uint32_t& segment_id, const std::string& key);
 
     // add 1 to get cnt of specified segment in current long period
-    // TODO: will be called when calling check_key
-    // TODO: remember to move this func to a single background thread aside check_key
-    // TODO: because this func shouldn't block get operations
+    // will be called when calling check_key
+    // remember to move this func to a single background thread aside check_key
+    // because this func shouldn't block get operations
     void hit_count_recorder(const uint32_t& segment_id);
 
     // copy counts to last_count_recorder and reset counts of current_count_recorder
@@ -145,19 +145,19 @@ public:
     // segment_info_recorder is external variable that records every alive segments' min key and max key
     // it is like { segment 1: [min_key_1, max_key_1], segment 2: [min_key_2, max_key_2], ... }
     // return true when heat_buckets is ready, so no need to call this func again
-    // TODO: remember to be called when receiving put opt. Normally, we can make heat_buckets_ ready before YCSB load end, so we can use it in YCSB testing phase
-    // TODO: every put operation will call a background thread to call make_heat_buckets_ready
-    // TODO: after this func return true, no need to call this func in put operation 
-    // TODO: remember to move this func to a single background thread aside put operations
+    // remember to be called when receiving put opt. Normally, we can make heat_buckets_ ready before YCSB load end, so we can use it in YCSB testing phase
+    // every put operation will call a background thread to call make_heat_buckets_ready
+    // after this func return true, no need to call this func in put operation 
+    // remember to move this func to a single background thread aside put operations
     bool make_heat_buckets_ready(const std::string& key, std::unordered_map<uint32_t, std::vector<std::string>>& segment_info_recorder);
 
     // clf_model_ need to determine feature nums before training
     // actually, YCSB will load data before testing
-    // features_nums: [feature_num_1, feature_num_2, ...], it includes all feature_num of all alive segments
+    // features_nums: [feature_num_1, feature_num_2, ...], it includes all feature_num of all non level 0 alive segments
     // feature_num_k is 2 * (number of key ranges intersecting with segment k) + 1
     // return true when clf_model_ set to ready successfully
-    // TODO: we need to call make_clf_model_ready before we first call try_retrain_model
-    // TODO: simply, if ready_work return true, we call make_clf_model_ready at once
+    // we need to call make_clf_model_ready before we first call try_retrain_model
+    // simply, if ready_work return true, we call make_clf_model_ready at once
     bool make_clf_model_ready(std::vector<uint16_t>& features_nums);
 
     // add 1 to get cnt of target key range for every get operation
@@ -165,7 +165,7 @@ public:
     // every get opt will make add 1 to only one heat bucket counter 
     // also need to update count records if one long period end
     // also need to re-calcuate estimated count of current segments and update FilterCacheHeap if one short period end
-    // TODO: we should use one background thread to call this func in every get operation
+    // we should use one background thread to call this func in every get operation
     void hit_heat_buckets(const std::string& key);
 
     // if one long period end, we need to check effectiveness of model. 
@@ -181,8 +181,8 @@ public:
     // we assume for every segment, its ranges in range_heat_recorder value must be unique!!!
     // all 3 recorders need to maintain all current non level 0 segments info, and their keys size and keys set should be the same (their keys are segments' ids)
     // we ignore all level 0 segments !!! 3 recorders keys set should be the same ------ all alive segments' ids (except level 0)
-    // TODO: because of the time cost of writing csv file, we need to do this func with a background thread
-    // TODO: need real benchmark data to debug this func
+    // because of the time cost of writing csv file, we need to do this func with a background thread
+    // need real benchmark data to debug this func
     void try_retrain_model(std::map<uint32_t, uint16_t>& level_recorder,
                            std::map<uint32_t, std::vector<RangeRatePair>>& segment_ranges_recorder,
                            std::map<uint32_t, uint32_t>& unit_size_recorder);
@@ -195,8 +195,8 @@ public:
     // noticed that we only pick up those segments that are in both level_recorder and segment_ranges_recorder
     // and update their filter units in filter cache and nodes in heap
     // so level_recorder keys set and segment_ranges_recorder keys set can be different
-    // TODO: only be called after try_retrain_model (should be guaranteed)
-    // TODO: we can guarantee this by putting try_retrain_model and update_cache_and_heap into only one background thread
+    // only be called after try_retrain_model (should be guaranteed)
+    // we can guarantee this by putting try_retrain_model and update_cache_and_heap into only one background thread
     void update_cache_and_heap(std::map<uint32_t, uint16_t>& level_recorder,
                                std::map<uint32_t, std::vector<RangeRatePair>>& segment_ranges_recorder);
 
@@ -204,9 +204,9 @@ public:
     // also remove related items in FilterCacheHeap
     // segment_ids: [level_1_segment_1, level_0_segment_1, ...]
     // level_0_segment_ids: [level_0_segment_1, ...]
-    // TODO: should be called by one background thread
-    // TODO: this func will be called by insert_segments
-    // TODO: you can also call this func alone after segments are merged (not suggested)
+    // should be called by one background thread
+    // this func will be called by insert_segments
+    // you can also call this func alone after segments are merged (not suggested)
     void remove_segments(std::vector<uint32_t>& segment_ids, std::set<uint32_t>& level_0_segment_ids);
 
     // insert new segments into cache
@@ -228,8 +228,8 @@ public:
     // segment_ranges_recorder: only include new segments, see update_cache_and_heap
     // level_recorder keys set and segment_ranges_recorder keys set can be different
     // but should ensure all new segments are in both level_recorder and segment_ranges_recorder
-    // TODO: should be called by one background thread!
-    // TODO: when old segments are merged into some new segments, call this func in one background thread
+    // should be called by one background thread!
+    // when old segments are merged into some new segments, call this func in one background thread
     void insert_segments(std::vector<uint32_t>& merged_segment_ids, std::vector<uint32_t>& new_segment_ids,
                          std::map<uint32_t, std::unordered_map<uint32_t, double>>& inherit_infos_recorder,
                          std::map<uint32_t, uint16_t>& level_recorder, const uint32_t& level_0_base_count,
@@ -241,7 +241,7 @@ public:
     // in YCSB Benchmark, sizes of filter units are very close
     // return true when we successfully make one adjustment
     // return false when we cannot make one adjustment
-    // TODO: one background should exec this func and never stop
+    // one background should exec this func and never stop
     bool adjust_cache_and_heap();
 };
 
