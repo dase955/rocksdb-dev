@@ -84,6 +84,7 @@ public:
 
     void clear();
 
+    // we can modify SAMPLES_MAXCNT to control the moment that starts init heat buckets
     bool is_ready() { return samples_cnt_ >= SAMPLES_MAXCNT; }
     bool is_full() { return pool_.size() >= SAMPLES_LIMIT; }
     bool is_sampled(const std::string& key) { return filter_.count(key) > 0; }

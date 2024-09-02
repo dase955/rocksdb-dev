@@ -46,6 +46,7 @@ bool RangeRatePairLessorComparor(const RangeRatePair& pair_1, const RangeRatePai
     return pair_1.rate_in_segment < pair_2.rate_in_segment;
 }
 
+
 bool RangeRatePairGreatorComparor(const RangeRatePair& pair_1, const RangeRatePair& pair_2) {
     return pair_1.rate_in_segment > pair_2.rate_in_segment;
 }

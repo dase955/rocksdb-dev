@@ -149,7 +149,7 @@ namespace ROCKSDB_NAMESPACE {
 // end this short period and start next short period
 #define PERIOD_COUNT 50000 
 // number of heat buckets (number of key ranges, see hotness estimating in the paper)
-#define DEFAULT_BUCKETS 500 
+#define DEFAULT_BUCKETS_NUM 500 
 // magic number in class HeatBuckets
 #define MAGIC_FACTOR 500 
 
@@ -203,5 +203,8 @@ namespace ROCKSDB_NAMESPACE {
 // filter cache map threshold
 #define FULL_RATE 0.98
 #define READY_RATE 0.70
+
+// filter cache client background threads num
+#define FILTER_CACHE_THREADS_NUM 10
 
 }  // namespace ROCKSDB_NAMESPACE
