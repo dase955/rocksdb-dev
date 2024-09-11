@@ -99,6 +99,9 @@ namespace {
   const std::string PROP_OPTIMIZE_LEVELCOMP = "rocksdb.optimize_level_style_compaction";
   const std::string PROP_OPTIMIZE_LEVELCOMP_DEFAULT = "false";
 
+  const std::string PROP_OPTIMIZE_UNIVERSALCOMP = "rocksdb.optimize_universal_style_compaction";
+  const std::string PROP_OPTIMIZE_UNIVERSALCOMP_DEFAULT = "false";
+
   const std::string PROP_OPTIONS_FILE = "rocksdb.optionsfile";
   const std::string PROP_OPTIONS_FILE_DEFAULT = "";
 
@@ -356,6 +359,9 @@ void RocksdbDB::GetOptions(const utils::Properties &props, rocksdb::Options *opt
     }
     if (props.GetProperty(PROP_OPTIMIZE_LEVELCOMP, PROP_OPTIMIZE_LEVELCOMP_DEFAULT) == "true") {
       opt->OptimizeLevelStyleCompaction();
+    }
+    if (props.GetProperty(PROP_OPTIMIZE_UNIVERSALCOMP, PROP_OPTIMIZE_UNIVERSALCOMP_DEFAULT) == "true") {
+      opt->OptimizeUniversalStyleCompaction();
     }
   }
 }
