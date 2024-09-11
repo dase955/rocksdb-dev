@@ -203,6 +203,8 @@ namespace ROCKSDB_NAMESPACE {
 // filter cache map threshold
 #define FULL_RATE 0.98
 #define READY_RATE 0.70
+// default init L0 counts
+#define INIT_LEVEL_0_COUNT 0
 
 // filter cache client background threads num
 #define FILTER_CACHE_THREADS_NUM 10

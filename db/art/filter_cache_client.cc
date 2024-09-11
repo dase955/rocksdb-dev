@@ -91,7 +91,11 @@ void FilterCacheClient::batch_insert_segments(std::vector<uint32_t>*& merged_seg
                                               std::map<uint32_t, std::unordered_map<uint32_t, double>>*& inherit_infos_recorder,
                                               std::map<uint32_t, uint16_t>*& level_recorder, const uint32_t& level_0_base_count,
                                               std::map<uint32_t, std::vector<RangeRatePair>>*& segment_ranges_recorder) {
-    pool_.submit_detach(do_batch_insert_segments, merged_segment_ids, new_segment_ids, inherit_infos_recorder, level_recorder, level_0_base_count, segment_ranges_recorder);
+    if (level_0_base_count == 0) {
+        pool_.submit_detach(do_batch_insert_segments, merged_segment_ids, new_segment_ids, inherit_infos_recorder, level_recorder, INIT_LEVEL_0_COUNT, segment_ranges_recorder);
+    } else {
+        pool_.submit_detach(do_batch_insert_segments, merged_segment_ids, new_segment_ids, inherit_infos_recorder, level_recorder, level_0_base_count, segment_ranges_recorder);
+    }
 }
 
 }
