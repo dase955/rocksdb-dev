@@ -2298,7 +2298,7 @@ Status BlockBasedTable::Get(const ReadOptions& read_options, const Slice& key,
                                prefix_extractor, v.handle.offset(), no_io,
                                /*const_ikey_ptr=*/nullptr, get_context,
                                &lookup_context);
-
+                               
       if (not_exist_in_filter) {
         // Not found
         // TODO: think about interaction with Merge. If a user key cannot
