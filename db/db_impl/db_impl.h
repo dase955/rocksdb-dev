@@ -26,7 +26,10 @@
 #include "db/art/vlog_manager.h"
 #include "db/art/heat_buckets.h"
 #include "db/art/clf_model.h"
+#include "db/art/filter_cache_item.h"
 #include "db/art/filter_cache_heap.h"
+#include "db/art/filter_cache.h"
+#include "db/art/filter_cache_client.h"
 #include "db/art/greedy_algo.h"
 #include "db/column_family.h"
 #include "db/compaction/compaction_job.h"
@@ -1903,6 +1906,9 @@ class DBImpl : public DB {
   HeatGroupManager* group_manager_;
 
 #ifdef ART_PLUS
+  // TODO: add necessary filter cache info structures
+  FilterCacheClient filter_cache_; // already contain FilterCacheManager
+
   /*
   HeatBuckets heat_buckets_;
 

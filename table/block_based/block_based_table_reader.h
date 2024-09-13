@@ -10,6 +10,7 @@
 #pragma once
 
 #include <memory>
+#include "db/art/filter_cache_client.h"
 #include "db/range_tombstone_fragmenter.h"
 #include "file/filename.h"
 #include "rocksdb/comparator.h"
@@ -137,8 +138,16 @@ class BlockBasedTable : public TableReader {
              GetContext* get_context, const SliceTransform* prefix_extractor,
              bool skip_filters = false) override;
 
+#ifdef ART_PLUS
+  Status Get(FilterCacheClient& filter_cache,
+             const ReadOptions& readOptions, const Slice& key,
+             GetContext* get_context, const SliceTransform* prefix_extractor,
+             bool skip_filters = false) override;
+#endif
+
   // WaLSM+ Note: call FullFilterKeyMayMatch() method in this file
   // PERF count False Positive in the end
+  // TODO: WaLSM+ Benchmark dont use MultiGet interface
   void MultiGet(const ReadOptions& readOptions,
                 const MultiGetContext::Range* mget_range,
                 const SliceTransform* prefix_extractor,
@@ -409,6 +418,16 @@ class BlockBasedTable : public TableReader {
                              const SliceTransform* prefix_extractor,
                              GetContext* get_context,
                              BlockCacheLookupContext* lookup_context) const;
+#ifdef ART_PLUS
+  bool FullFilterKeyMayMatch(FilterCacheClient& filter_cache,
+                             const ReadOptions& read_options,
+                             FilterBlockReader* filter, const Slice& user_key,
+                             const bool no_io,
+                             const SliceTransform* prefix_extractor,
+                             GetContext* get_context,
+                             BlockCacheLookupContext* lookup_context) const;
+#endif
+  // TODO: not used in WaLSM+ Benchmark, meybe used in MultiGet interface ?
   // WaLSM+ Note: filter->PrefixesMayMatch() or filter->KeyMayMatch()
   void FullFilterKeysMayMatch(const ReadOptions& read_options,
                               FilterBlockReader* filter, MultiGetRange* range,

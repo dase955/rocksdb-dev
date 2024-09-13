@@ -1878,6 +1878,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
 
   if (!done) {
     PERF_TIMER_GUARD(get_from_output_files_time);
+#ifndef ART_PLUS
     sv->current->Get(
         read_options, lkey, get_impl_options.value, timestamp, &s,
         &merge_context, &max_covering_tombstone_seq,
@@ -1886,6 +1887,17 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
         get_impl_options.get_value ? get_impl_options.callback : nullptr,
         get_impl_options.get_value ? get_impl_options.is_blob_index : nullptr,
         get_impl_options.get_value);
+#else
+    sv->current->Get(
+        filter_cache_,
+        read_options, lkey, get_impl_options.value, timestamp, &s,
+        &merge_context, &max_covering_tombstone_seq,
+        get_impl_options.get_value ? get_impl_options.value_found : nullptr,
+        nullptr, nullptr,
+        get_impl_options.get_value ? get_impl_options.callback : nullptr,
+        get_impl_options.get_value ? get_impl_options.is_blob_index : nullptr,
+        get_impl_options.get_value);
+#endif
     RecordTick(stats_, MEMTABLE_MISS);
     get_in_ssd.fetch_add(1);
   } else {
@@ -1927,6 +1939,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
   return s;
 }
 
+// TODO: WaLSM+ Benchmark dont use MultiGet interface
 std::vector<Status> DBImpl::MultiGet(
     const ReadOptions& read_options,
     const std::vector<ColumnFamilyHandle*>& column_family,

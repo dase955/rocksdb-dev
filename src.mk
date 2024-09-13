@@ -35,6 +35,7 @@ LIB_SOURCES =                                                   \
   db/art/filter_cache_heap.cc                                   \
   db/art/filter_cache_item.cc                                   \
   db/art/filter_cache.cc                                        \
+  db/art/filter_cache_client.cc                                 \
   db/art/greedy_algo.cc                                         \
   db/art/heat_group.cc                                          \
   db/art/lock.cc                                                \

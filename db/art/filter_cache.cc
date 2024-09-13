@@ -482,7 +482,7 @@ bool FilterCacheManager::adjust_cache_and_heap() {
     if (can_adjust) {
         std::unordered_map<uint32_t, uint16_t> segment_units_num_recorder;
         std::set<uint32_t> empty_level_0_segment_ids; // no level 0 segment in heaps, dont worry
-        std::set<uint32_t> empty_failed_segment_ids;
+        std::set<uint32_t> empty_failed_segment_ids; // force to update segments' filter units group, so dont worry for cache space
         segment_units_num_recorder.insert(std::make_pair(result.enable_segment_id, result.enable_segment_next_units_num));
         segment_units_num_recorder.insert(std::make_pair(result.disable_segment_id, result.disable_segment_next_units_num));
         filter_cache_.update_for_segments(segment_units_num_recorder, true, empty_level_0_segment_ids, empty_failed_segment_ids);

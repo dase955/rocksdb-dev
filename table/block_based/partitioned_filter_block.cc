@@ -256,6 +256,26 @@ bool PartitionedFilterBlockReader::KeyMayMatch(
                   &FullFilterBlockReader::KeyMayMatch);
 }
 
+#ifdef ART_PLUS
+bool PartitionedFilterBlockReader::KeyMayMatch(
+    FilterCacheClient& filter_cache,
+    const Slice& key, const SliceTransform* prefix_extractor,
+    uint64_t block_offset, const bool no_io, const Slice* const const_ikey_ptr,
+    GetContext* get_context, BlockCacheLookupContext* lookup_context) {
+  assert(const_ikey_ptr != nullptr);
+  assert(block_offset == kNotValid);
+  if (!whole_key_filtering()) {
+    return true;
+  }
+
+  return MayMatch(filter_cache,
+                  key, prefix_extractor, block_offset, no_io, const_ikey_ptr,
+                  get_context, lookup_context,
+                  &FullFilterBlockReader::KeyMayMatch);
+}
+#endif
+
+// TODO: not used in WaLSM+ Benchmark, meybe used in MultiGet interface ?
 void PartitionedFilterBlockReader::KeysMayMatch(
     MultiGetRange* range, const SliceTransform* prefix_extractor,
     uint64_t block_offset, const bool no_io,
@@ -269,6 +289,7 @@ void PartitionedFilterBlockReader::KeysMayMatch(
            &FullFilterBlockReader::KeysMayMatch);
 }
 
+// not use prefix filter in WaLSM+ Benchmark
 bool PartitionedFilterBlockReader::PrefixMayMatch(
     const Slice& prefix, const SliceTransform* prefix_extractor,
     uint64_t block_offset, const bool no_io, const Slice* const const_ikey_ptr,
@@ -417,6 +438,70 @@ bool PartitionedFilterBlockReader::MayMatch(
       lookup_context);
 }
 
+#ifdef ART_PLUS
+bool PartitionedFilterBlockReader::MayMatch(
+    FilterCacheClient& filter_cache,
+    const Slice& slice, const SliceTransform* prefix_extractor,
+    uint64_t block_offset, bool no_io, const Slice* const_ikey_ptr,
+    GetContext* get_context, BlockCacheLookupContext* lookup_context,
+    FilterFunction filter_function) const {
+  /*
+   simple example of filter cache object:
+   uint32_t segment_id = 100;
+   std::string key = "k";
+   bool result = filter_cache.check_key(segment_id, k);
+  */
+  // TODO: leave filter unit data or filter unit reader into filter_cache, so block cache only need to cache filter index?
+  CachableEntry<Block> filter_block;
+  Status s =
+      GetOrReadFilterBlock(no_io, get_context, lookup_context, &filter_block);
+  if (UNLIKELY(!s.ok())) {
+    IGNORE_STATUS_IF_ERROR(s);
+    return true;
+  }
+
+  if (UNLIKELY(filter_block.GetValue()->size() == 0)) {
+    return true;
+  }
+
+  #ifdef ART_PLUS
+  // find key "0 original_internal key". filter_index=segment_id=0. (WaLSM+)
+  // segment_id itself is useless in comparison, 
+  // but must be appended otherwise the extracted user key will be incorrect.
+  std::unique_ptr<const char[]> modified_key_buf;
+  Slice modified_key =
+      generate_modified_internal_key(modified_key_buf, *const_ikey_ptr, 0, 0);
+  auto filter_handle = GetFilterPartitionHandle(filter_block, modified_key);
+  #else
+  auto filter_handle = GetFilterPartitionHandle(filter_block, *const_ikey_ptr);
+  #endif
+  if (UNLIKELY(filter_handle.size() == 0)) {  // key is out of range
+    return false;
+  }
+
+  // TODO: get some filter blocks from the filter cache and check (WaLSM+)
+  CachableEntry<ParsedFullFilterBlock> filter_partition_block;
+  s = GetFilterPartitionBlock(nullptr /* prefetch_buffer */, filter_handle,
+                              no_io, get_context, lookup_context,
+                              &filter_partition_block);
+  if (UNLIKELY(!s.ok())) {
+    IGNORE_STATUS_IF_ERROR(s);
+    return true;
+  }
+
+  FullFilterBlockReader filter_partition(table(),
+                                         std::move(filter_partition_block));
+  // initialize the reader with hash_id (WaLSM+)
+  // FullFilterBlockReader filter_partition(table(),
+                                        //  std::move(filter_partition_block),
+                                        //  1);
+  return (filter_partition.*filter_function)(
+      slice, prefix_extractor, block_offset, no_io, const_ikey_ptr, get_context,
+      lookup_context);
+}
+#endif
+
+// TODO: used when calling MultiGet, but we dont use MultiGet in WaLSM+ Benchmark
 // TODO: retrieve filter block from filter cache (WaLSM+)
 void PartitionedFilterBlockReader::MayMatch(
     MultiGetRange* range, const SliceTransform* prefix_extractor,
