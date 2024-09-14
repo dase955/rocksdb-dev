@@ -242,7 +242,7 @@ void FilterCacheManager::inherit_count_recorder(std::vector<uint32_t>& merged_se
 
     for (uint32_t& new_segment_id : new_segment_ids) {
         auto last_it = last_count_recorder_.find(new_segment_id);
-        uint32_t new_last_count = level_0_base_count;
+        uint32_t new_last_count = level_0_base_count; // level 0 segments init
         if (new_last_count_recorder.count(new_segment_id) > 0) {
             new_last_count = new_last_count_recorder[new_segment_id];
         }
@@ -253,7 +253,7 @@ void FilterCacheManager::inherit_count_recorder(std::vector<uint32_t>& merged_se
         }
 
         auto current_it = current_count_recorder_.find(new_segment_id);
-        uint32_t new_current_count = level_0_base_count;
+        uint32_t new_current_count = level_0_base_count; // level 0 segments init
         if (new_current_count_recorder.count(new_segment_id) > 0) {
             new_current_count = new_current_count_recorder[new_segment_id];
         }
@@ -297,7 +297,7 @@ void FilterCacheManager::try_retrain_model(std::map<uint32_t, uint16_t>& level_r
     // we should guarantee these 3 external recorder share the same keys set
     // we need to do this job outside FilterCacheManager
     assert(level_recorder.size() == segment_ranges_recorder.size());
-    assert(level_recorder.size() == unit_size_recorder.size());
+    // assert(level_recorder.size() == unit_size_recorder.size());
     if (train_signal_ == false) {
         return;
     }
@@ -305,6 +305,7 @@ void FilterCacheManager::try_retrain_model(std::map<uint32_t, uint16_t>& level_r
     // solve programming problem
     std::map<uint32_t, uint16_t> label_recorder;
     std::map<uint32_t, SegmentAlgoInfo> algo_infos;
+    /*
     auto get_cnt_it = last_count_recorder_.begin();
     auto unit_size_it = unit_size_recorder.begin();
     while (unit_size_it != unit_size_recorder.end() && get_cnt_it != last_count_recorder_.end()) {
@@ -316,6 +317,14 @@ void FilterCacheManager::try_retrain_model(std::map<uint32_t, uint16_t>& level_r
             algo_infos.insert(std::make_pair(unit_size_it->first, SegmentAlgoInfo(get_cnt_it->second, unit_size_it->second)));
             unit_size_it ++;
         }
+    }
+    greedy_algo_.solve(algo_infos, label_recorder, filter_cache_.cache_size_except_level_0());
+    */
+    assert(unit_size_recorder.size() == 0);
+    auto get_cnt_it = last_count_recorder_.begin();
+    while (get_cnt_it != last_count_recorder_.end()) {
+        algo_infos.insert(std::make_pair(get_cnt_it->first, SegmentAlgoInfo(get_cnt_it->second, DEFAULT_UNIT_SIZE)));
+        get_cnt_it ++;
     }
     greedy_algo_.solve(algo_infos, label_recorder, filter_cache_.cache_size_except_level_0());
 
