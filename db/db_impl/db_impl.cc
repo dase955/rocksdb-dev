@@ -250,8 +250,26 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname,
   period_cnt_ = 0;
   last_train_period_ = 0;
   */
+  segment_info_recorder_ = new std::unordered_map<uint32_t, std::vector<std::string>>;
+  level_recorder_ = new std::map<uint32_t, uint16_t>;
+  level_0_base_count_ = 0;
+
+  features_nums_except_level_0_ = new std::vector<uint16_t>;
+  uint16_t features_num = MAX_FEATURES_NUM;
+  if (features_num > 0) {
+    features_nums_except_level_0_->emplace_back(features_num);
+  }
+
+  segment_ranges_recorder_ = new std::map<uint32_t, std::vector<RangeRatePair>>;
+
+  unit_size_recorder_ = new std::map<uint32_t, uint32_t>;
+
+  filter_cache_.retrain_or_keep_model(features_nums_except_level_0_, 
+                                      level_recorder_,
+                                      segment_ranges_recorder_,
+                                      unit_size_recorder_);
+  filter_cache_.make_adjustment();
 #endif
-  
   // !batch_per_trx_ implies seq_per_batch_ because it is only unset for
   // WriteUnprepared, which should use seq_per_batch_.
   assert(batch_per_txn_ || seq_per_batch_);
@@ -1758,6 +1776,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
 // WaLSM+: add hotness estimating
 #ifdef ART
   std::string art_key(key.data(), key.size());
+  filter_cache_.get_updating_work(art_key);
 #ifdef ART_PLUS
   // ready to estimate hotness, update heat buckets
   /*

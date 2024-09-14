@@ -166,7 +166,7 @@ namespace ROCKSDB_NAMESPACE {
 // also we need to multiple key range rate by RATE_SIGNIFICANT_DIGITS_FACTOR
 #define HOTNESS_SIGNIFICANT_DIGITS_FACTOR 1e6 
 #define RATE_SIGNIFICANT_DIGITS_FACTOR 1e3
-// model feature num max limit : 3 * 30 + 1
+// model feature num max limit : 2 * 45 + 1
 #define MAX_FEATURES_NUM 91
 
 // config micro connecting to LightGBM server 
@@ -205,6 +205,8 @@ namespace ROCKSDB_NAMESPACE {
 #define READY_RATE 0.70
 // default init L0 counts
 #define INIT_LEVEL_0_COUNT 0
+// default size of one filter unit (bits)
+#define DEFAULT_UNIT_SIZE 0
 
 // filter cache client background threads num
 #define FILTER_CACHE_THREADS_NUM 10
