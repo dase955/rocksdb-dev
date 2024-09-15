@@ -38,7 +38,7 @@ void FilterCacheClient::do_retrain_or_keep_model(std::vector<uint16_t>* const fe
     filter_cache_manager_.make_clf_model_ready(*features_nums_except_level_0);
     while (level_recorder->size() != segment_ranges_recorder->size());
     level_copy = *level_recorder; segment_ranges_copy = *segment_ranges_recorder;
-    if (level_copy.size() != segment_ranges_copy.size()) {
+    while (level_copy.size() != segment_ranges_copy.size()) {
         while (level_recorder->size() != segment_ranges_recorder->size());
         level_copy = *level_recorder; segment_ranges_copy = *segment_ranges_recorder;
     }
