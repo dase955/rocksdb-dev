@@ -51,7 +51,7 @@ void FilterCacheClient::do_retrain_or_keep_model(std::vector<uint16_t>* const fe
         while (!filter_cache_manager_.need_retrain()); // wait for long period end
         while (level_recorder->size() != segment_ranges_recorder->size());
         level_copy = *level_recorder; segment_ranges_copy = *segment_ranges_recorder;
-        if (level_copy.size() != segment_ranges_copy.size()) {
+        while (level_copy.size() != segment_ranges_copy.size()) {
             while (level_recorder->size() != segment_ranges_recorder->size());
             level_copy = *level_recorder; segment_ranges_copy = *segment_ranges_recorder;
         }
