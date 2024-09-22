@@ -1353,7 +1353,7 @@ class DBImpl : public DB {
   };
 
   // Argument required by background flush thread.
-  struct BGFlushArg {
+  struct BGFlushArg { // TODO: WaLSM+ , can we pass info into arg?
     BGFlushArg()
         : cfd_(nullptr), max_memtable_id_(0), superversion_context_(nullptr) {}
     BGFlushArg(ColumnFamilyData* cfd, uint64_t max_memtable_id,
@@ -1374,7 +1374,7 @@ class DBImpl : public DB {
   };
 
   // Argument passed to flush thread.
-  struct FlushThreadArg {
+  struct FlushThreadArg { // TODO: WaLSM+ , can we pass info into arg?
     DBImpl* db_;
 
     Env::Priority thread_pri_;
@@ -1521,6 +1521,7 @@ class DBImpl : public DB {
                                       WriteBatch* my_batch);
 
   // REQUIRES: mutex locked and in write thread.
+  // WaLSM+ Note: updating max memtable ID of every column families, then call schedule func
   Status ScheduleFlushes(WriteContext* context);
 
   void MaybeFlushStatsCF(autovector<ColumnFamilyData*>* cfds);

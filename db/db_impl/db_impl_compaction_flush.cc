@@ -142,6 +142,7 @@ IOStatus DBImpl::SyncClosedLogs(JobContext* job_context) {
   return io_s;
 }
 
+// TODO
 Status DBImpl::FlushMemTableToOutputFile(
     ColumnFamilyData* cfd, const MutableCFOptions& mutable_cf_options,
     bool* made_progress, JobContext* job_context,
@@ -304,6 +305,7 @@ Status DBImpl::FlushMemTableToOutputFile(
   return s;
 }
 
+// TODO
 Status DBImpl::FlushMemTablesToOutputFiles(
     const autovector<BGFlushArg>& bg_flush_args, bool* made_progress,
     JobContext* job_context, LogBuffer* log_buffer, Env::Priority thread_pri) {
@@ -686,6 +688,7 @@ Status DBImpl::AtomicFlushMemTablesToOutputFiles(
   return s;
 }
 
+// WaLSM+ Note: just notify that flush begin (no-op), do not intersect with flushes
 void DBImpl::NotifyOnFlushBegin(ColumnFamilyData* cfd, FileMetaData* file_meta,
                                 const MutableCFOptions& mutable_cf_options,
                                 int job_id) {
@@ -737,6 +740,7 @@ void DBImpl::NotifyOnFlushBegin(ColumnFamilyData* cfd, FileMetaData* file_meta,
 #endif  // ROCKSDB_LITE
 }
 
+// WaLSM+ Note: just notify that flush completed (no-op), do not intersect with flushes
 void DBImpl::NotifyOnFlushCompleted(
     ColumnFamilyData* cfd, const MutableCFOptions& mutable_cf_options,
     std::list<std::unique_ptr<FlushJobInfo>>* flush_jobs_info) {
@@ -777,6 +781,7 @@ void DBImpl::NotifyOnFlushCompleted(
 #endif  // ROCKSDB_LITE
 }
 
+// WaLSM+ Note: Manual Compact method, not used in YCSB benchmark
 Status DBImpl::CompactRange(const CompactRangeOptions& options,
                             ColumnFamilyHandle* column_family,
                             const Slice* begin, const Slice* end) {
@@ -969,6 +974,7 @@ Status DBImpl::CompactRange(const CompactRangeOptions& options,
   return s;
 }
 
+// WaLSM+ Note: Manual Compact method, not used in YCSB benchmark
 Status DBImpl::CompactFiles(const CompactionOptions& compact_options,
                             ColumnFamilyHandle* column_family,
                             const std::vector<std::string>& input_file_names,
@@ -1470,6 +1476,7 @@ int DBImpl::Level0StopWriteTrigger(ColumnFamilyHandle* column_family) {
       ->mutable_cf_options.level0_stop_writes_trigger;
 }
 
+// TODO
 Status DBImpl::Flush(const FlushOptions& flush_options,
                      ColumnFamilyHandle* column_family) {
   auto cfh = static_cast_with_check<ColumnFamilyHandleImpl>(column_family);
@@ -1489,6 +1496,7 @@ Status DBImpl::Flush(const FlushOptions& flush_options,
   return s;
 }
 
+// TODO
 Status DBImpl::Flush(const FlushOptions& flush_options,
                      const std::vector<ColumnFamilyHandle*>& column_families) {
   Status s;
@@ -1689,6 +1697,7 @@ void DBImpl::GenerateFlushRequest(const autovector<ColumnFamilyData*>& cfds,
   }
 }
 
+// TODO
 Status DBImpl::FlushMemTable(ColumnFamilyData* cfd,
                              const FlushOptions& flush_options,
                              FlushReason flush_reason, bool writes_stopped) {
@@ -2086,6 +2095,7 @@ void DBImpl::EnableManualCompaction() {
   manual_compaction_paused_.fetch_sub(1, std::memory_order_release);
 }
 
+// WaLSM+ Note: schedule flush and compaction if possible
 void DBImpl::MaybeScheduleFlushOrCompaction() {
   mutex_.AssertHeld();
   if (!opened_successfully_) {
@@ -2249,6 +2259,7 @@ ColumnFamilyData* DBImpl::PickCompactionFromQueue(
   return cfd;
 }
 
+// TODO
 void DBImpl::SchedulePendingFlush(const FlushRequest& flush_req,
                                   FlushReason flush_reason) {
   if (flush_req.empty()) {
@@ -2277,6 +2288,7 @@ void DBImpl::SchedulePendingPurge(std::string fname, std::string dir_to_sync,
   purge_files_.insert({{number, std::move(file_info)}});
 }
 
+// TODO
 void DBImpl::BGWorkFlush(void* arg) {
   FlushThreadArg fta = *(reinterpret_cast<FlushThreadArg*>(arg));
   delete reinterpret_cast<FlushThreadArg*>(arg);
@@ -2330,11 +2342,13 @@ void DBImpl::UnscheduleCompactionCallback(void* arg) {
   TEST_SYNC_POINT("DBImpl::UnscheduleCompactionCallback");
 }
 
+// TODO
 void DBImpl::UnscheduleFlushCallback(void* arg) {
   delete reinterpret_cast<FlushThreadArg*>(arg);
   TEST_SYNC_POINT("DBImpl::UnscheduleFlushCallback");
 }
 
+// TODO
 Status DBImpl::BackgroundFlush(bool* made_progress, JobContext* job_context,
                                LogBuffer* log_buffer, FlushReason* reason,
                                Env::Priority thread_pri) {
@@ -2415,6 +2429,7 @@ Status DBImpl::BackgroundFlush(bool* made_progress, JobContext* job_context,
   return status;
 }
 
+// TODO
 void DBImpl::BackgroundCallFlush(Env::Priority thread_pri) {
   bool made_progress = false;
   JobContext job_context(next_job_id_.fetch_add(1), true);
@@ -2502,6 +2517,7 @@ struct DBCompactionJob {
   SuperVersionContext* superversion_context;
 };
 
+// TODO
 void DBImpl::SyncCallFlush(std::vector<SingleCompactionJob*>& jobs) {
   JobContext job_context(next_job_id_.fetch_add(1), true);
 
