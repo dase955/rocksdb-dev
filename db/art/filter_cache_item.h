@@ -6,7 +6,9 @@
 #include <cassert>
 #include <vector>
 #include <map>
+#include "db/version_edit.h"
 #include "macros.h"
+#include "table/block_based/parsed_full_filter_block.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -23,6 +25,8 @@ namespace ROCKSDB_NAMESPACE {
 // 成员函数需要在filter_cache_item.cc里定义
 class FilterCacheItem {
 private:
+    FileMetaData* file_meta_;
+    // std::vector<ParsedFullFilterBlock> filter_block_data_;
     // 这里定义一些必要的成员变量，尽量设置为private
     // 可以存handle、segment id等信息
     // 允许使用STL类，如vector、map等

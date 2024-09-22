@@ -20,9 +20,11 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <cassert>
 #include <memory>
 #include <string>
 #include <vector>
+#include "db/art/filter_cache_client.h"
 #include "db/dbformat.h"
 #include "rocksdb/options.h"
 #include "rocksdb/slice.h"
@@ -102,6 +104,19 @@ class FilterBlockReader {
                            const Slice* const const_ikey_ptr,
                            GetContext* get_context,
                            BlockCacheLookupContext* lookup_context) = 0;
+
+#ifdef ART_PLUS
+  virtual bool KeyMayMatch(FilterCacheClient& filter_cache,
+                           const Slice& key,
+                           const SliceTransform* prefix_extractor,
+                           uint64_t block_offset, const bool no_io,
+                           const Slice* const const_ikey_ptr,
+                           GetContext* get_context,
+                           BlockCacheLookupContext* lookup_context) {
+    assert(false);
+    return false;
+  }
+#endif
 
   virtual void KeysMayMatch(MultiGetRange* range,
                             const SliceTransform* prefix_extractor,

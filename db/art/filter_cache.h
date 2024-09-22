@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <iostream>
 #include <fstream>
 #include <mutex>
@@ -8,6 +9,7 @@
 #include <map>
 #include <set>
 #include <unordered_map>
+#include "db/version_edit.h"
 #include "macros.h"
 #include "greedy_algo.h"
 #include "clf_model.h"
@@ -102,10 +104,11 @@ private:
     static std::map<uint32_t, uint32_t> current_count_recorder_; // get cnt recorder of segments in current long period
     static std::mutex count_mutex_; // guarentee last_count_recorder and current_count_recorder treated orderedly
     static bool is_ready_; // check whether ready to use adaptive filter assignment
+    static std::map<uint32_t, FileMetaData*> segment_in_file; // map segment_id to SST file
 public:
     FilterCacheManager() { get_cnt_ = 0; last_long_period_ = 0; last_short_period_ = 0; train_signal_ = false; }
 
-    ~FilterCacheManager();
+    ~FilterCacheManager() {}
 
     // one background thread monitor this func, if return true, call try_retrain_model at once, wait for training end, and call update_cache_and_heap
     bool need_retrain() { return train_signal_; }
@@ -243,6 +246,10 @@ public:
     // return false when we cannot make one adjustment
     // one background should exec this func and never stop
     bool adjust_cache_and_heap();
+
+    // only for test
+    ColumnFamilyData* cfd = nullptr;
+    // std::mutex cfd_mutex;
 };
 
 }

@@ -106,7 +106,7 @@ class PartitionedFilterBlockReader : public FilterBlockReaderCommon<Block> {
                    const Slice& key, const SliceTransform* prefix_extractor,
                    uint64_t block_offset, const bool no_io,
                    const Slice* const const_ikey_ptr, GetContext* get_context,
-                   BlockCacheLookupContext* lookup_context);
+                   BlockCacheLookupContext* lookup_context) override;
 #endif
   // TODO: not used in WaLSM+ Benchmark, meybe used in MultiGet interface ?
   void KeysMayMatch(MultiGetRange* range,
@@ -129,6 +129,11 @@ class PartitionedFilterBlockReader : public FilterBlockReaderCommon<Block> {
   size_t ApproximateMemoryUsage() const override;
 
  private:
+  #ifdef ART_PLUS
+  std::pair<Slice, BlockHandle> GetFilterPartitionKeyAndHandle(
+      const CachableEntry<Block>& filter_block, const Slice& entry) const;
+  #endif
+
   BlockHandle GetFilterPartitionHandle(const CachableEntry<Block>& filter_block,
                                        const Slice& entry) const;
   Status GetFilterPartitionBlock(

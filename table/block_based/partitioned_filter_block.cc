@@ -6,7 +6,9 @@
 #include "table/block_based/partitioned_filter_block.h"
 
 #include <atomic>
+#include <cassert>
 #include <cstring>
+#include <iostream>
 #include <memory>
 #include <utility>
 
@@ -21,6 +23,7 @@
 #include "rocksdb/status.h"
 #include "table/block_based/block.h"
 #include "table/block_based/block_based_table_reader.h"
+#include "table/format.h"
 #include "util/coding.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -114,6 +117,7 @@ void PartitionedFilterBlockBuilder::MaybeCutAFilterBlock(
   std::string& index_key = p_index_builder_->GetPartitionKey();
   filters.push_back({index_key, filter});
   #endif
+  std::cerr << "keys_added_to_partition = " << keys_per_partition_ << "\n";
   keys_added_to_partition_ = 0;
   Reset();
 }
@@ -350,6 +354,33 @@ BlockHandle PartitionedFilterBlockReader::GetFilterPartitionHandle(
   return fltr_blk_handle;
 }
 
+#ifdef ART_PLUS
+std::pair<Slice, BlockHandle> PartitionedFilterBlockReader::GetFilterPartitionKeyAndHandle(
+    const CachableEntry<Block>& filter_block, const Slice& entry) const {
+  IndexBlockIter iter;
+  const Comparator* const segment_id_removing_comparator = table()->get_rep()->segment_id_removing_comparator.get();
+  Statistics* kNullStats = nullptr;
+  filter_block.GetValue()->NewIndexIterator(
+      segment_id_removing_comparator,
+      table()->get_rep()->get_global_seqno(BlockType::kFilter), &iter,
+      kNullStats, true /* total_order_seek */, false /* have_first_key */,
+      index_key_includes_seq(), index_value_is_full());
+  iter.Seek(entry);
+  if (UNLIKELY(!iter.Valid())) {
+    // entry is larger than all the keys. However its prefix might still be
+    // present in the last partition. If this is called by PrefixMayMatch this
+    // is necessary for correct behavior. Otherwise it is unnecessary but safe.
+    // Assuming this is an unlikely case for full key search, the performance
+    // overhead should be negligible.
+    iter.SeekToLast();
+  }
+  assert(iter.Valid());
+  Slice fltr_block_key = iter.key();
+  BlockHandle fltr_blk_handle = iter.value().handle;
+  return {fltr_block_key, fltr_blk_handle};
+}
+#endif
+
 // TODO: retrieve filter block from filter cache (WaLSM+)
 Status PartitionedFilterBlockReader::GetFilterPartitionBlock(
     FilePrefetchBuffer* prefetch_buffer, const BlockHandle& fltr_blk_handle,
@@ -464,20 +495,22 @@ bool PartitionedFilterBlockReader::MayMatch(
     return true;
   }
 
-  #ifdef ART_PLUS
   // find key "0 original_internal key". filter_index=segment_id=0. (WaLSM+)
   // segment_id itself is useless in comparison, 
   // but must be appended otherwise the extracted user key will be incorrect.
   std::unique_ptr<const char[]> modified_key_buf;
   Slice modified_key =
       generate_modified_internal_key(modified_key_buf, *const_ikey_ptr, 0, 0);
-  auto filter_handle = GetFilterPartitionHandle(filter_block, modified_key);
-  #else
-  auto filter_handle = GetFilterPartitionHandle(filter_block, *const_ikey_ptr);
-  #endif
+  // auto filter_handle = GetFilterPartitionHandle(filter_block, modified_key);
+  auto key_and_handle = GetFilterPartitionKeyAndHandle(filter_block, modified_key);
+  Slice filter_key = key_and_handle.first;
+  auto filter_handle = key_and_handle.second;
   if (UNLIKELY(filter_handle.size() == 0)) {  // key is out of range
     return false;
   }
+
+  assert(filter_key.size() >= 8); //   
+  // uint32_t segment_id = DecodeFixed32R(filter_key.data() + filter_key);
 
   // TODO: get some filter blocks from the filter cache and check (WaLSM+)
   CachableEntry<ParsedFullFilterBlock> filter_partition_block;

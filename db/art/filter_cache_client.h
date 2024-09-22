@@ -83,6 +83,9 @@ public:
                                std::map<uint32_t, std::unordered_map<uint32_t, double>> inherit_infos_recorder,
                                std::map<uint32_t, uint16_t> level_recorder, const uint32_t& level_0_base_count,
                                std::map<uint32_t, std::vector<RangeRatePair>> segment_ranges_recorder);
+    
+    // for test only
+    void test_cfd(ColumnFamilyData* cfd); 
 };
 
 }

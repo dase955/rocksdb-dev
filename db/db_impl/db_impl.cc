@@ -1691,6 +1691,8 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
       get_impl_options.column_family);
   auto cfd = cfh->cfd();
 
+  filter_cache_.test_cfd(cfd);
+
   if (tracer_) {
     // TODO: This mutex should be removed later, to improve performance when
     // tracing is enabled.

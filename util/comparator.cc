@@ -232,11 +232,13 @@ class SegmentIdRemovingComparatorImpl : public Comparator {
 
   void FindShortestSeparator(std::string* start,
                              const Slice& limit) const override {
-    real_comparator->FindShortestSeparator(start, limit);
+    // real_comparator->FindShortestSeparator(start, limit);
+    // do nothing to disable the key shortening feature
   }
 
   void FindShortSuccessor(std::string* key) const override {
-    real_comparator->FindShortSuccessor(key);
+    // real_comparator->FindShortSuccessor(key);
+    // do nothing to disable the key shortening feature
   }
 
   bool IsSameLengthImmediateSuccessor(const Slice& s,

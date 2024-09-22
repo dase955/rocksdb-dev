@@ -26,6 +26,7 @@
 #include "db/job_context.h"
 #include "db/range_del_aggregator.h"
 #include "db/table_properties_collector.h"
+#include "db/version_edit.h"
 #include "db/version_set.h"
 #include "db/write_controller.h"
 #include "file/sst_file_manager_impl.h"

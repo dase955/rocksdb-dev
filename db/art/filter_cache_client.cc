@@ -1,4 +1,7 @@
 #include "filter_cache_client.h"
+#include <iostream>
+#include <mutex>
+#include <ostream>
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -120,4 +123,18 @@ void FilterCacheClient::batch_insert_segments(std::vector<uint32_t> merged_segme
     }
 }
 
+void FilterCacheClient::test_cfd(ColumnFamilyData* cfd) {
+    // std::lock_guard<std::mutex> guard(filter_cache_manager_.cfd_mutex);
+    if (filter_cache_manager_.cfd == nullptr) {
+        std::cout << "first time cfd: " << cfd << std::endl;
+        filter_cache_manager_.cfd = cfd;
+    } else if (filter_cache_manager_.cfd == cfd) {
+        // do nothing
+    } else {
+        std::cout << "hold cfd: " << filter_cache_manager_.cfd << std::endl;
+        std::cout << "new cfd:  " << cfd << std::endl;
+        std::cout << "error: cfd replaced" << std::endl;
+        assert(0);
+    }
+}
 }

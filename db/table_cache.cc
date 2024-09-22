@@ -8,6 +8,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "db/table_cache.h"
+#include <cassert>
 
 #include "db/dbformat.h"
 #include "db/range_tombstone_fragmenter.h"
@@ -514,6 +515,11 @@ Status TableCache::Get(FilterCacheClient& filter_cache,
         t = GetTableReaderFromHandle(handle);
       }
     }
+
+    BlockBasedTable* block_based_table = nullptr;
+    block_based_table = static_cast<BlockBasedTable*>(t);
+    assert(block_based_table != nullptr);
+
     SequenceNumber* max_covering_tombstone_seq =
         get_context->max_covering_tombstone_seq();
     if (s.ok() && max_covering_tombstone_seq != nullptr &&
@@ -529,7 +535,7 @@ Status TableCache::Get(FilterCacheClient& filter_cache,
     if (s.ok()) {
       get_context->SetReplayLog(row_cache_entry);  // nullptr if no cache.
       // only add filter_cache argument 
-      s = t->Get(filter_cache, options, k, get_context, prefix_extractor, skip_filters);
+      s = block_based_table->Get(filter_cache, options, k, get_context, prefix_extractor, skip_filters);
       get_context->SetReplayLog(nullptr);
     } else if (options.read_tier == kBlockCacheTier && s.IsIncomplete()) {
       // Couldn't find Table in cache but treat as kFound if no_io set

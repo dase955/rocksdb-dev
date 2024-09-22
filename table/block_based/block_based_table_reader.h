@@ -142,7 +142,7 @@ class BlockBasedTable : public TableReader {
   Status Get(FilterCacheClient& filter_cache,
              const ReadOptions& readOptions, const Slice& key,
              GetContext* get_context, const SliceTransform* prefix_extractor,
-             bool skip_filters = false) override;
+             bool skip_filters = false);
 #endif
 
   // WaLSM+ Note: call FullFilterKeyMayMatch() method in this file
