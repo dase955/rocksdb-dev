@@ -50,6 +50,7 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+// WaLSM+ Note: copy of FlushJob, add nvm reading
 NVMFlushJob::NVMFlushJob(SingleCompactionJob* job,
     const std::string& dbname, ColumnFamilyData* cfd,
     const ImmutableDBOptions& db_options,
@@ -146,6 +147,7 @@ void NVMFlushJob::Preprocess() {
   }
 }
 
+// TODO(WaLSM+): we can pass info recorders to BuildTableFromArt()?
 void NVMFlushJob::Build() {
   Status s;
   {

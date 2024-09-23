@@ -142,7 +142,7 @@ IOStatus DBImpl::SyncClosedLogs(JobContext* job_context) {
   return io_s;
 }
 
-// TODO
+// TODO(WaLSM+): create flush_job and call flush_job.run(), we can pass info recorders into run()?
 Status DBImpl::FlushMemTableToOutputFile(
     ColumnFamilyData* cfd, const MutableCFOptions& mutable_cf_options,
     bool* made_progress, JobContext* job_context,
@@ -305,7 +305,7 @@ Status DBImpl::FlushMemTableToOutputFile(
   return s;
 }
 
-// TODO
+// TODO(WaLSM+): read flush args and parse every arg to every flush job
 Status DBImpl::FlushMemTablesToOutputFiles(
     const autovector<BGFlushArg>& bg_flush_args, bool* made_progress,
     JobContext* job_context, LogBuffer* log_buffer, Env::Priority thread_pri) {
@@ -1476,7 +1476,7 @@ int DBImpl::Level0StopWriteTrigger(ColumnFamilyHandle* column_family) {
       ->mutable_cf_options.level0_stop_writes_trigger;
 }
 
-// TODO
+// WaLSM+ Note: Manual Flush method, not used in YCSB
 Status DBImpl::Flush(const FlushOptions& flush_options,
                      ColumnFamilyHandle* column_family) {
   auto cfh = static_cast_with_check<ColumnFamilyHandleImpl>(column_family);
@@ -1496,7 +1496,7 @@ Status DBImpl::Flush(const FlushOptions& flush_options,
   return s;
 }
 
-// TODO
+// WaLSM+ Note: Manual Flush method, not used in YCSB
 Status DBImpl::Flush(const FlushOptions& flush_options,
                      const std::vector<ColumnFamilyHandle*>& column_families) {
   Status s;
@@ -1697,7 +1697,7 @@ void DBImpl::GenerateFlushRequest(const autovector<ColumnFamilyData*>& cfds,
   }
 }
 
-// TODO
+// WaLSM+ Note: only used in start, shutdown and replication, not used in YCSB
 Status DBImpl::FlushMemTable(ColumnFamilyData* cfd,
                              const FlushOptions& flush_options,
                              FlushReason flush_reason, bool writes_stopped) {
@@ -2259,7 +2259,6 @@ ColumnFamilyData* DBImpl::PickCompactionFromQueue(
   return cfd;
 }
 
-// TODO
 void DBImpl::SchedulePendingFlush(const FlushRequest& flush_req,
                                   FlushReason flush_reason) {
   if (flush_req.empty()) {
@@ -2288,7 +2287,7 @@ void DBImpl::SchedulePendingPurge(std::string fname, std::string dir_to_sync,
   purge_files_.insert({{number, std::move(file_info)}});
 }
 
-// TODO
+// TODO(WaLSM+): read Flush arg and pass to background job
 void DBImpl::BGWorkFlush(void* arg) {
   FlushThreadArg fta = *(reinterpret_cast<FlushThreadArg*>(arg));
   delete reinterpret_cast<FlushThreadArg*>(arg);
@@ -2342,13 +2341,12 @@ void DBImpl::UnscheduleCompactionCallback(void* arg) {
   TEST_SYNC_POINT("DBImpl::UnscheduleCompactionCallback");
 }
 
-// TODO
 void DBImpl::UnscheduleFlushCallback(void* arg) {
   delete reinterpret_cast<FlushThreadArg*>(arg);
   TEST_SYNC_POINT("DBImpl::UnscheduleFlushCallback");
 }
 
-// TODO
+// TODO(WaLSM+): build flush args and pass to FlushMemTablesToOutputFiles
 Status DBImpl::BackgroundFlush(bool* made_progress, JobContext* job_context,
                                LogBuffer* log_buffer, FlushReason* reason,
                                Env::Priority thread_pri) {
@@ -2429,7 +2427,7 @@ Status DBImpl::BackgroundFlush(bool* made_progress, JobContext* job_context,
   return status;
 }
 
-// TODO
+// TODO(WaLSM+): we pass flush args to BackgroundFlush, so we can pass our info recorders?
 void DBImpl::BackgroundCallFlush(Env::Priority thread_pri) {
   bool made_progress = false;
   JobContext job_context(next_job_id_.fetch_add(1), true);
@@ -2517,7 +2515,7 @@ struct DBCompactionJob {
   SuperVersionContext* superversion_context;
 };
 
-// TODO
+// TODO(WaLSM+): check out NVMFlushJob()? try to pass info recorders
 void DBImpl::SyncCallFlush(std::vector<SingleCompactionJob*>& jobs) {
   JobContext job_context(next_job_id_.fetch_add(1), true);
 

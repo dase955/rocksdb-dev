@@ -1352,8 +1352,9 @@ class DBImpl : public DB {
         : fname(fn), dir_to_sync(d), type(t), number(num), job_id(jid) {}
   };
 
+  // TODO(WaLSM+): can we pass info into arg?
   // Argument required by background flush thread.
-  struct BGFlushArg { // TODO: WaLSM+ , can we pass info into arg?
+  struct BGFlushArg {
     BGFlushArg()
         : cfd_(nullptr), max_memtable_id_(0), superversion_context_(nullptr) {}
     BGFlushArg(ColumnFamilyData* cfd, uint64_t max_memtable_id,
@@ -1373,8 +1374,9 @@ class DBImpl : public DB {
     SuperVersionContext* superversion_context_;
   };
 
+  // TODO(WaLSM+): can we pass info into arg?
   // Argument passed to flush thread.
-  struct FlushThreadArg { // TODO: WaLSM+ , can we pass info into arg?
+  struct FlushThreadArg {
     DBImpl* db_;
 
     Env::Priority thread_pri_;

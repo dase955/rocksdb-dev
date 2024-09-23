@@ -352,6 +352,7 @@ Status BuildTable(
   return s;
 }
 
+// TODO(WaLSM+): what to do with our info recorders?
 Status BuildTableFromArt(
     SingleCompactionJob *job,
     const std::string& dbname, Env* env, FileSystem* fs,

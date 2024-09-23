@@ -191,6 +191,7 @@ void FlushJob::PickMemTable() {
   base_->Ref();  // it is likely that we do not need this reference
 }
 
+// TODO(WaLSM+): maybe we can pass info recorders to WriteLevel0Table()?
 Status FlushJob::Run(LogsWithPrepTracker* prep_tracker,
                      FileMetaData* file_meta) {
   TEST_SYNC_POINT("FlushJob::Start");
@@ -308,6 +309,8 @@ void FlushJob::Cancel() {
   base_->Unref();
 }
 
+// TODO(WaLSM+): maybe we can pass info recorders to BuildTable()? reminded that use a mutex to guarantee consistency of info recorders
+//               also we need to call filter cache func to update filter cache after BuildTable() succeed?
 Status FlushJob::WriteLevel0Table() {
   AutoThreadOperationStageUpdater stage_updater(
       ThreadStatus::STAGE_FLUSH_WRITE_L0);
