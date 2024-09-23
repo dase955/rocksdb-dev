@@ -1352,7 +1352,6 @@ class DBImpl : public DB {
         : fname(fn), dir_to_sync(d), type(t), number(num), job_id(jid) {}
   };
 
-  // TODO(WaLSM+): can we pass info into arg?
   // Argument required by background flush thread.
   struct BGFlushArg {
     BGFlushArg()
@@ -1374,7 +1373,6 @@ class DBImpl : public DB {
     SuperVersionContext* superversion_context_;
   };
 
-  // TODO(WaLSM+): can we pass info into arg?
   // Argument passed to flush thread.
   struct FlushThreadArg {
     DBImpl* db_;
@@ -1911,6 +1909,9 @@ class DBImpl : public DB {
 #ifdef ART_PLUS
   // TODO: add necessary filter cache info structures
   FilterCacheClient filter_cache_; // already contain FilterCacheManager
+
+  // TODO: mutex for updating these recorders below
+  std::mutex filter_cache_mutex_;
 
   // segment_info_recorder save every segments' min key and max key
   // but we only need to pass empty segment_info_recorder now

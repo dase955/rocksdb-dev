@@ -142,7 +142,6 @@ IOStatus DBImpl::SyncClosedLogs(JobContext* job_context) {
   return io_s;
 }
 
-// TODO(WaLSM+): create flush_job and call flush_job.run(), we can pass info recorders into run()?
 Status DBImpl::FlushMemTableToOutputFile(
     ColumnFamilyData* cfd, const MutableCFOptions& mutable_cf_options,
     bool* made_progress, JobContext* job_context,
@@ -305,7 +304,6 @@ Status DBImpl::FlushMemTableToOutputFile(
   return s;
 }
 
-// TODO(WaLSM+): read flush args and parse every arg to every flush job
 Status DBImpl::FlushMemTablesToOutputFiles(
     const autovector<BGFlushArg>& bg_flush_args, bool* made_progress,
     JobContext* job_context, LogBuffer* log_buffer, Env::Priority thread_pri) {
@@ -2287,7 +2285,6 @@ void DBImpl::SchedulePendingPurge(std::string fname, std::string dir_to_sync,
   purge_files_.insert({{number, std::move(file_info)}});
 }
 
-// TODO(WaLSM+): read Flush arg and pass to background job
 void DBImpl::BGWorkFlush(void* arg) {
   FlushThreadArg fta = *(reinterpret_cast<FlushThreadArg*>(arg));
   delete reinterpret_cast<FlushThreadArg*>(arg);
@@ -2346,7 +2343,6 @@ void DBImpl::UnscheduleFlushCallback(void* arg) {
   TEST_SYNC_POINT("DBImpl::UnscheduleFlushCallback");
 }
 
-// TODO(WaLSM+): build flush args and pass to FlushMemTablesToOutputFiles
 Status DBImpl::BackgroundFlush(bool* made_progress, JobContext* job_context,
                                LogBuffer* log_buffer, FlushReason* reason,
                                Env::Priority thread_pri) {
@@ -2427,7 +2423,6 @@ Status DBImpl::BackgroundFlush(bool* made_progress, JobContext* job_context,
   return status;
 }
 
-// TODO(WaLSM+): we pass flush args to BackgroundFlush, so we can pass our info recorders?
 void DBImpl::BackgroundCallFlush(Env::Priority thread_pri) {
   bool made_progress = false;
   JobContext job_context(next_job_id_.fetch_add(1), true);

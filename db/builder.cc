@@ -352,7 +352,7 @@ Status BuildTable(
   return s;
 }
 
-// TODO(WaLSM+): what to do with our info recorders?
+// TODO(WaLSM+): what to do with our info recorders? we need pass global recorders pointers first
 Status BuildTableFromArt(
     SingleCompactionJob *job,
     const std::string& dbname, Env* env, FileSystem* fs,
@@ -421,6 +421,7 @@ Status BuildTableFromArt(
         ioptions.statistics, ioptions.listeners,
         ioptions.file_checksum_gen_factory));
 
+    // TODO(WaLSM+): pass temp recorders ptrs to builder (should be blocked based table)
     builder = NewTableBuilder(
         ioptions, mutable_cf_options, internal_comparator,
         int_tbl_prop_collector_factories, column_family_id,
@@ -441,6 +442,7 @@ Status BuildTableFromArt(
   }
 
   TEST_SYNC_POINT("BuildTable:BeforeFinishBuildTable");
+  // TODO(WaLSM+): get temp recorders
   s = builder->Finish();
   *io_status = builder->io_status();
   if (s.ok()) {
@@ -532,6 +534,12 @@ Status BuildTableFromArt(
       job_id, meta->fd, meta->oldest_blob_file_number, tp, reason, s,
       file_checksum, file_checksum_func_name);
 
+  // TODO(WaLSM+): if all ok, merge temp recorders into global DBImpl recorders. 
+  //               we need a mutex to guarantee these recorders modified by only one background thread at one time
+  // DBImpl::filter_cache_mutex_.lock();
+  // merge merge temp recorders into global DBImpl recorders.
+  // call filter cache client DBImpl::filter_cache_ update work
+  // DBImpl::filter_cache_mutex_.unlock();
   return s;
 }
 
