@@ -60,6 +60,7 @@ class VersionSet;
 // goes through the stages of `Prepare()`->`Run()`->`Install()`. CompactionJob
 // will divide the compaction into subcompactions and execute them in parallel
 // if needed.
+// TODO(WaLSM+): shell we pass global recorders here? or just pass temp recorders?
 class CompactionJob {
  public:
   CompactionJob(

@@ -442,7 +442,7 @@ Status BuildTableFromArt(
   }
 
   TEST_SYNC_POINT("BuildTable:BeforeFinishBuildTable");
-  // TODO(WaLSM+): get temp recorders
+  // TODO(WaLSM+): we will get temp recorders after finishing
   s = builder->Finish();
   *io_status = builder->io_status();
   if (s.ok()) {
@@ -534,12 +534,6 @@ Status BuildTableFromArt(
       job_id, meta->fd, meta->oldest_blob_file_number, tp, reason, s,
       file_checksum, file_checksum_func_name);
 
-  // TODO(WaLSM+): if all ok, merge temp recorders into global DBImpl recorders. 
-  //               we need a mutex to guarantee these recorders modified by only one background thread at one time
-  // DBImpl::filter_cache_mutex_.lock();
-  // merge merge temp recorders into global DBImpl recorders.
-  // call filter cache client DBImpl::filter_cache_ update work
-  // DBImpl::filter_cache_mutex_.unlock();
   return s;
 }
 

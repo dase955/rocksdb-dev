@@ -2166,7 +2166,7 @@ void DBImpl::MaybeScheduleFlushOrCompaction() {
 
   while (bg_compaction_scheduled_ < bg_job_limits.max_compactions &&
          unscheduled_compactions_ > 0) {
-    CompactionArg* ca = new CompactionArg;
+    CompactionArg* ca = new CompactionArg; // TODO(WaLSM+): maybe we need to set recorders ptr here?
     ca->db = this;
     ca->prepicked_compaction = nullptr;
     bg_compaction_scheduled_++;
@@ -2295,6 +2295,7 @@ void DBImpl::BGWorkFlush(void* arg) {
   TEST_SYNC_POINT("DBImpl::BGWorkFlush:done");
 }
 
+// TODO(WaLSM+): maybe we can pass recorders ptrs here?
 void DBImpl::BGWorkCompaction(void* arg) {
   CompactionArg ca = *(reinterpret_cast<CompactionArg*>(arg));
   delete reinterpret_cast<CompactionArg*>(arg);
@@ -2307,6 +2308,7 @@ void DBImpl::BGWorkCompaction(void* arg) {
   delete prepicked_compaction;
 }
 
+// TODO(WaLSM+): maybe we can pass recorders ptrs here?
 void DBImpl::BGWorkBottomCompaction(void* arg) {
   CompactionArg ca = *(static_cast<CompactionArg*>(arg));
   delete static_cast<CompactionArg*>(arg);
@@ -2503,6 +2505,7 @@ void DBImpl::BackgroundCallFlush(Env::Priority thread_pri) {
   }
 }
 
+// TODO(WaLSM+): include compaction? or only flush?
 struct DBCompactionJob {
   NVMFlushJob* nvm_flush_job;
   IOStatus io_s;
@@ -2510,7 +2513,7 @@ struct DBCompactionJob {
   SuperVersionContext* superversion_context;
 };
 
-// TODO(WaLSM+): check out NVMFlushJob()? try to pass info recorders
+// TODO(WaLSM+): check out NVMFlushJob()? try to pass temp info recorders and merge these recorders
 void DBImpl::SyncCallFlush(std::vector<SingleCompactionJob*>& jobs) {
   JobContext job_context(next_job_id_.fetch_add(1), true);
 
@@ -2582,6 +2585,13 @@ void DBImpl::SyncCallFlush(std::vector<SingleCompactionJob*>& jobs) {
     InstallSuperVersionAndScheduleWork(default_cfd,
                                        db_jobs.front().superversion_context,
                                        mutable_cf_options);
+    // do new SSTs already exist in latest version?
+    // TODO(WaLSM+): if all ok, merge temp recorders into global DBImpl recorders. 
+    //               we need a mutex to guarantee these recorders modified by only one background thread at one time
+    // DBImpl::filter_cache_mutex_.lock();
+    // merge merge temp recorders into global DBImpl recorders.
+    // call filter cache client DBImpl::filter_cache_ update work
+    // DBImpl::filter_cache_mutex_.unlock();
 
     const std::string& column_family_name = default_cfd->GetName();
     Version* const current = default_cfd->current();
@@ -2639,6 +2649,7 @@ void DBImpl::SyncCallFlush(std::vector<SingleCompactionJob*>& jobs) {
   }
 }
 
+// TODO(WaLSM+): maybe we can pass recorders ptrs here?
 void DBImpl::BackgroundCallCompaction(PrepickedCompaction* prepicked_compaction,
                                       Env::Priority bg_thread_pri) {
   bool made_progress = false;
@@ -2662,6 +2673,7 @@ void DBImpl::BackgroundCallCompaction(PrepickedCompaction* prepicked_compaction,
     assert((bg_thread_pri == Env::Priority::BOTTOM &&
             bg_bottom_compaction_scheduled_) ||
            (bg_thread_pri == Env::Priority::LOW && bg_compaction_scheduled_));
+    // TODO(WaLSM+): maybe we can pass recorders ptrs here?
     Status s = BackgroundCompaction(&made_progress, &job_context, &log_buffer,
                                     prepicked_compaction, bg_thread_pri);
     TEST_SYNC_POINT("BackgroundCallCompaction:1");
@@ -2753,8 +2765,11 @@ void DBImpl::BackgroundCallCompaction(PrepickedCompaction* prepicked_compaction,
     // that case, all DB variables will be dealloacated and referencing them
     // will cause trouble.
   }
+
+  // TODO(WaLSM+): maybe we can pass recorders ptrs here? update recorders here or in compaction thread? shell we consider errors?
 }
 
+// TODO(WaLSM+): maybe we can pass temp recorders ptrs here and merge at last?
 Status DBImpl::BackgroundCompaction(bool* made_progress,
                                     JobContext* job_context,
                                     LogBuffer* log_buffer,
@@ -2952,6 +2967,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
   }
 
   IOStatus io_s;
+  // TODO(WaLSM+): which branch we will get into? the last one?
   if (!c) {
     // Nothing to do
     ROCKS_LOG_BUFFER(log_buffer, "Compaction nothing to do");
@@ -3101,7 +3117,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     GetSnapshotContext(job_context, &snapshot_seqs,
                        &earliest_write_conflict_snapshot, &snapshot_checker);
     assert(is_snapshot_supported_ || snapshots_.empty());
-    CompactionJob compaction_job(
+    CompactionJob compaction_job( // TODO(WaLSM+): what can we do with CompactionJob? pass temp recorders here?
         job_context->job_id, c.get(), immutable_db_options_,
         file_options_for_compaction_, versions_.get(), &shutting_down_,
         preserve_deletes_seqnum_.load(), log_buffer, directories_.GetDbDir(),
@@ -3121,7 +3137,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     TEST_SYNC_POINT_CALLBACK(
         "DBImpl::BackgroundCompaction:NonTrivial:BeforeRun", nullptr);
     // Should handle erorr?
-    compaction_job.Run().PermitUncheckedError();
+    compaction_job.Run().PermitUncheckedError(); // TODO(WaLSM+): update temp recorders in Run()
     TEST_SYNC_POINT("DBImpl::BackgroundCompaction:NonTrivial:AfterRun");
     mutex_.Lock();
 
@@ -3131,10 +3147,19 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
       InstallSuperVersionAndScheduleWork(c->column_family_data(),
                                          &job_context->superversion_contexts[0],
                                          *c->mutable_cf_options());
+
+      // TODO(WaLSM+): if all ok, merge temp recorders into global DBImpl recorders. 
+      //               we need a mutex to guarantee these recorders modified by only one background thread at one time
+      // DBImpl::filter_cache_mutex_.lock();
+      // merge merge temp recorders into global DBImpl recorders.
+      // call filter cache client DBImpl::filter_cache_ update work
+      // DBImpl::filter_cache_mutex_.unlock();
     }
     *made_progress = true;
     TEST_SYNC_POINT_CALLBACK("DBImpl::BackgroundCompaction:AfterCompaction",
                              c->column_family_data());
+
+    
   }
 
   if (status.ok() && !io_s.ok()) {

@@ -1408,7 +1408,7 @@ class DBImpl : public DB {
     std::unique_ptr<TaskLimiterToken> task_token;
   };
 
-  struct CompactionArg {
+  struct CompactionArg { // TODO(WaLSM+): maybe we can put recorders ptrs into this Arg?
     // caller retains ownership of `db`.
     DBImpl* db;
     // background compaction takes ownership of `prepicked_compaction`.
