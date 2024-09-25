@@ -243,6 +243,10 @@ public:
     // return false when we cannot make one adjustment
     // one background should exec this func and never stop
     bool adjust_cache_and_heap();
+
+    std::vector<std::string>& range_seperators() {
+        return heat_buckets_.seperators();
+    }
 };
 
 }

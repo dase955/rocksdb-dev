@@ -2166,7 +2166,7 @@ void DBImpl::MaybeScheduleFlushOrCompaction() {
 
   while (bg_compaction_scheduled_ < bg_job_limits.max_compactions &&
          unscheduled_compactions_ > 0) {
-    CompactionArg* ca = new CompactionArg; // TODO(WaLSM+): maybe we need to set recorders ptr here?
+    CompactionArg* ca = new CompactionArg;
     ca->db = this;
     ca->prepicked_compaction = nullptr;
     bg_compaction_scheduled_++;
@@ -2295,7 +2295,6 @@ void DBImpl::BGWorkFlush(void* arg) {
   TEST_SYNC_POINT("DBImpl::BGWorkFlush:done");
 }
 
-// TODO(WaLSM+): maybe we can pass recorders ptrs here?
 void DBImpl::BGWorkCompaction(void* arg) {
   CompactionArg ca = *(reinterpret_cast<CompactionArg*>(arg));
   delete reinterpret_cast<CompactionArg*>(arg);
@@ -2308,7 +2307,6 @@ void DBImpl::BGWorkCompaction(void* arg) {
   delete prepicked_compaction;
 }
 
-// TODO(WaLSM+): maybe we can pass recorders ptrs here?
 void DBImpl::BGWorkBottomCompaction(void* arg) {
   CompactionArg ca = *(static_cast<CompactionArg*>(arg));
   delete static_cast<CompactionArg*>(arg);
@@ -2505,7 +2503,6 @@ void DBImpl::BackgroundCallFlush(Env::Priority thread_pri) {
   }
 }
 
-// TODO(WaLSM+): include compaction? or only flush?
 struct DBCompactionJob {
   NVMFlushJob* nvm_flush_job;
   IOStatus io_s;
@@ -2541,9 +2538,24 @@ void DBImpl::SyncCallFlush(std::vector<SingleCompactionJob*>& jobs) {
         *default_cfd->GetLatestMutableCFOptions();
     default_cfd->mem()->SetNextLogNumber(logfile_number_);
 
+    // these global recorders need to be latest after every flush or compaction:
+    // std::map<uint32_t, uint16_t>* level_recorder_
+    // std::map<uint32_t, std::vector<RangeRatePair>>* segment_ranges_recorder_
+    // std::map<uint32_t, uint32_t>* unit_size_recorder_
+    // you may need filter_cache_.range_seperators() to receive key range seperators
+    // exactly, if key k < seperators[i+1] and key k >= seperators[i], then key k hit key range i
+    // HeatBuckets::locate(const std::string& key) will tell you how to binary search corresponding key range for one key
+    std::set<uint32_t>* merged_segment_ids; // the merged segments' id, we need to delete them from these 3 global recorders
+    std::map<uint32_t, uint16_t>* new_level_recorder = new std::map<uint32_t, uint16_t>;
+    std::map<uint32_t, std::vector<RangeRatePair>>* new_segment_ranges_recorder = new std::map<uint32_t, std::vector<RangeRatePair>>;
+    std::map<uint32_t, uint32_t>* new_unit_size_recorder = new std::map<uint32_t, uint32_t>;
+    std::vector<std::string>& key_range_seperators = filter_cache_.range_seperators();
+    // TODO(WaLSM+): you can pass these var into NVMFlushJob and update them when flushing
+
     int idx = 0;
     std::vector<DBCompactionJob> db_jobs;
     for (auto job : jobs) {
+      // TODO(WaLSM+): pass temp recorders into NVMFlushJob or NVMFlushJob.build()?
       num_running_flushes_++;
       auto nvm_flush_job = new NVMFlushJob(
           job,
@@ -2585,13 +2597,6 @@ void DBImpl::SyncCallFlush(std::vector<SingleCompactionJob*>& jobs) {
     InstallSuperVersionAndScheduleWork(default_cfd,
                                        db_jobs.front().superversion_context,
                                        mutable_cf_options);
-    // do new SSTs already exist in latest version?
-    // TODO(WaLSM+): if all ok, merge temp recorders into global DBImpl recorders. 
-    //               we need a mutex to guarantee these recorders modified by only one background thread at one time
-    // DBImpl::filter_cache_mutex_.lock();
-    // merge merge temp recorders into global DBImpl recorders.
-    // call filter cache client DBImpl::filter_cache_ update work
-    // DBImpl::filter_cache_mutex_.unlock();
 
     const std::string& column_family_name = default_cfd->GetName();
     Version* const current = default_cfd->current();
@@ -2646,10 +2651,27 @@ void DBImpl::SyncCallFlush(std::vector<SingleCompactionJob*>& jobs) {
 
     atomic_flush_install_cv_.SignalAll();
     bg_cv_.SignalAll();
+
+    // do new SSTs already exist in latest version?
+    // TODO(WaLSM+): if all ok, merge temp recorders into global DBImpl recorders. 
+    //               we need a mutex to guarantee these recorders modified by only one background thread at one time
+    filter_cache_mutex_.lock();
+    // TODO: merge merge temp recorders into global DBImpl recorders.
+    // TODO: call filter cache client DBImpl::filter_cache_ update work 
+    // TODO: remember to release temp recorders ptr!!!
+    // temp recorders below:
+    // std::set<uint32_t>* merged_segment_ids;
+    // std::map<uint32_t, uint16_t>* new_level_recorder;
+    // std::map<uint32_t, std::vector<RangeRatePair>>* new_segment_ranges_recorder;
+    // std::map<uint32_t, uint32_t>* new_unit_size_recorder;
+    // these global recorders need to be latest after every flush or compaction:
+    // std::map<uint32_t, uint16_t>* level_recorder_
+    // std::map<uint32_t, std::vector<RangeRatePair>>* segment_ranges_recorder_
+    // std::map<uint32_t, uint32_t>* unit_size_recorder_
+    filter_cache_mutex_.unlock();
   }
 }
 
-// TODO(WaLSM+): maybe we can pass recorders ptrs here?
 void DBImpl::BackgroundCallCompaction(PrepickedCompaction* prepicked_compaction,
                                       Env::Priority bg_thread_pri) {
   bool made_progress = false;
@@ -2673,7 +2695,6 @@ void DBImpl::BackgroundCallCompaction(PrepickedCompaction* prepicked_compaction,
     assert((bg_thread_pri == Env::Priority::BOTTOM &&
             bg_bottom_compaction_scheduled_) ||
            (bg_thread_pri == Env::Priority::LOW && bg_compaction_scheduled_));
-    // TODO(WaLSM+): maybe we can pass recorders ptrs here?
     Status s = BackgroundCompaction(&made_progress, &job_context, &log_buffer,
                                     prepicked_compaction, bg_thread_pri);
     TEST_SYNC_POINT("BackgroundCallCompaction:1");
@@ -2765,11 +2786,9 @@ void DBImpl::BackgroundCallCompaction(PrepickedCompaction* prepicked_compaction,
     // that case, all DB variables will be dealloacated and referencing them
     // will cause trouble.
   }
-
-  // TODO(WaLSM+): maybe we can pass recorders ptrs here? update recorders here or in compaction thread? shell we consider errors?
 }
 
-// TODO(WaLSM+): maybe we can pass temp recorders ptrs here and merge at last?
+// TODO(WaLSM+): maybe we can pass temp recorders ptrs and merge at last?
 Status DBImpl::BackgroundCompaction(bool* made_progress,
                                     JobContext* job_context,
                                     LogBuffer* log_buffer,
@@ -2966,6 +2985,20 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     }
   }
 
+  // these global recorders need to be latest after every flush or compaction:
+  // std::map<uint32_t, uint16_t>* level_recorder_
+  // std::map<uint32_t, std::vector<RangeRatePair>>* segment_ranges_recorder_
+  // std::map<uint32_t, uint32_t>* unit_size_recorder_
+  // you may need filter_cache_.range_seperators() to receive key range seperators
+  // exactly, if key k < seperators[i+1] and key k >= seperators[i], then key k hit key range i
+  // HeatBuckets::locate(const std::string& key) will tell you how to binary search corresponding key range for one key
+  std::set<uint32_t>* merged_segment_ids; // the merged segments' id, we need to delete them from these 3 global recorders
+  std::map<uint32_t, uint16_t>* new_level_recorder = new std::map<uint32_t, uint16_t>;
+  std::map<uint32_t, std::vector<RangeRatePair>>* new_segment_ranges_recorder = new std::map<uint32_t, std::vector<RangeRatePair>>;
+  std::map<uint32_t, uint32_t>* new_unit_size_recorder = new std::map<uint32_t, uint32_t>;
+  std::vector<std::string>& key_range_seperators = filter_cache_.range_seperators();
+  // TODO(WaLSM+): you can pass these var into CompactionJob and update them when compacting
+
   IOStatus io_s;
   // TODO(WaLSM+): which branch we will get into? the last one?
   if (!c) {
@@ -3117,7 +3150,8 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     GetSnapshotContext(job_context, &snapshot_seqs,
                        &earliest_write_conflict_snapshot, &snapshot_checker);
     assert(is_snapshot_supported_ || snapshots_.empty());
-    CompactionJob compaction_job( // TODO(WaLSM+): what can we do with CompactionJob? pass temp recorders here?
+    // TODO: pass temp recorders into CompactionJob or CompactionJob.Run()?
+    CompactionJob compaction_job(
         job_context->job_id, c.get(), immutable_db_options_,
         file_options_for_compaction_, versions_.get(), &shutting_down_,
         preserve_deletes_seqnum_.load(), log_buffer, directories_.GetDbDir(),
@@ -3137,7 +3171,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     TEST_SYNC_POINT_CALLBACK(
         "DBImpl::BackgroundCompaction:NonTrivial:BeforeRun", nullptr);
     // Should handle erorr?
-    compaction_job.Run().PermitUncheckedError(); // TODO(WaLSM+): update temp recorders in Run()
+    compaction_job.Run().PermitUncheckedError();
     TEST_SYNC_POINT("DBImpl::BackgroundCompaction:NonTrivial:AfterRun");
     mutex_.Lock();
 
@@ -3147,13 +3181,6 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
       InstallSuperVersionAndScheduleWork(c->column_family_data(),
                                          &job_context->superversion_contexts[0],
                                          *c->mutable_cf_options());
-
-      // TODO(WaLSM+): if all ok, merge temp recorders into global DBImpl recorders. 
-      //               we need a mutex to guarantee these recorders modified by only one background thread at one time
-      // DBImpl::filter_cache_mutex_.lock();
-      // merge merge temp recorders into global DBImpl recorders.
-      // call filter cache client DBImpl::filter_cache_ update work
-      // DBImpl::filter_cache_mutex_.unlock();
     }
     *made_progress = true;
     TEST_SYNC_POINT_CALLBACK("DBImpl::BackgroundCompaction:AfterCompaction",
@@ -3264,6 +3291,27 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     }
     m->in_progress = false;  // not being processed anymore
   }
+
+  // do new SSTs already exist in latest version?
+  // TODO(WaLSM+): if all ok, merge temp recorders into global DBImpl recorders. 
+  //               we need a mutex to guarantee these recorders modified by only one background thread at one time
+  filter_cache_mutex_.lock();
+  if (status.ok()) {
+    // TODO: merge merge temp recorders into global DBImpl recorders.
+    // TODO: call filter cache client DBImpl::filter_cache_ update work 
+    // TODO: remember to release temp recorders ptr!!!
+  }
+  // temp recorders below:
+  // std::set<uint32_t>* merged_segment_ids;
+  // std::map<uint32_t, uint16_t>* new_level_recorder;
+  // std::map<uint32_t, std::vector<RangeRatePair>>* new_segment_ranges_recorder;
+  // std::map<uint32_t, uint32_t>* new_unit_size_recorder;
+  // these global recorders need to be latest after every flush or compaction:
+  // std::map<uint32_t, uint16_t>* level_recorder_
+  // std::map<uint32_t, std::vector<RangeRatePair>>* segment_ranges_recorder_
+  // std::map<uint32_t, uint32_t>* unit_size_recorder_
+  filter_cache_mutex_.unlock();
+  
   TEST_SYNC_POINT("DBImpl::BackgroundCompaction:Finish");
   return status;
 }

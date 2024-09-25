@@ -1408,7 +1408,7 @@ class DBImpl : public DB {
     std::unique_ptr<TaskLimiterToken> task_token;
   };
 
-  struct CompactionArg { // TODO(WaLSM+): maybe we can put recorders ptrs into this Arg?
+  struct CompactionArg {
     // caller retains ownership of `db`.
     DBImpl* db;
     // background compaction takes ownership of `prepicked_compaction`.
@@ -1911,11 +1911,20 @@ class DBImpl : public DB {
   FilterCacheClient filter_cache_; // already contain FilterCacheManager
 
   // TODO: mutex for updating these recorders below
+  //       will be locked when updating these recorders below, and unlock after updating ends
   std::mutex filter_cache_mutex_;
+
+  // these global recorders need to be latest after every flush or compaction:
+  // std::map<uint32_t, uint16_t>* level_recorder_
+  // std::map<uint32_t, std::vector<RangeRatePair>>* segment_ranges_recorder_
+  // std::map<uint32_t, uint32_t>* unit_size_recorder_
+  // you may need filter_cache_.range_seperators() to receive key range seperators
+  // exactly, if key k < seperators[i+1] and key k >= seperators[i], then key k hit key range i
+  // HeatBuckets::locate(const std::string& key) will tell you how to binary search corresponding key range for one key
 
   // segment_info_recorder save every segments' min key and max key
   // but we only need to pass empty segment_info_recorder now
-  // TODO: it should contain all levels segments' min key and max key, then pass to filter cache client
+  // TODO: it should contain all levels segments' min key and max key, then pass to filter cache client, but not used now
   // this recorder will help decide the key ranges' num, but it dont work in current work
   // you can try to modify macro DEFAULT_BUCKETS_NUM to decide the key ranges' num
   std::unordered_map<uint32_t, std::vector<std::string>>* segment_info_recorder_;

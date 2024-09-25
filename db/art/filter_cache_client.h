@@ -47,6 +47,10 @@ public:
         heat_buckets_ready_ = false;
     }
 
+    std::vector<std::string>& range_seperators() {
+        return filter_cache_manager_.range_seperators();
+    }
+
     // corresponding to FilterCacheManager.make_heat_buckets_ready
     // segment_info_recorder is a map that recorder min key and max key of every segment, its value be like: [min key, max key]
     // because heat buckets is mainly used for model features, and model dont do any work on level 0 segments
