@@ -3018,7 +3018,9 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
 
     NotifyOnCompactionBegin(c->column_family_data(), c.get(), status,
                             compaction_job_stats, job_context->job_id);
-
+    
+    // TODO(WaLSM+): no new SST generated, we only record deleted segment id?
+    //               maybe we need to record segment ids for every SST for convience?
     for (const auto& f : *c->inputs(0)) {
       c->edit()->DeleteFile(c->level(), f->fd.GetNumber());
     }
@@ -3059,6 +3061,13 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
         continue;
       }
       for (size_t i = 0; i < c->num_input_files(l); i++) {
+        // TODO(WaLSM+): no new SST generated and no SST merged
+        //               we can copy moved segment ids into merged segment ids. 
+        //               then copy these segments' kv pairs into temp recorders from global recorders
+        //               (remember update segments' level to latest one)
+        //               this will delete these segments' outdate info from global recorders 
+        //               then insert these segments' latest info into global recorders 
+        //               maybe we need to record segment ids for every SST for convience?
         FileMetaData* f = c->input(l, i);
         c->edit()->DeleteFile(c->level(l), f->fd.GetNumber());
         c->edit()->AddFile(c->output_level(), f->fd.GetNumber(),
