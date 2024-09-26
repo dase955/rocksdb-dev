@@ -2556,6 +2556,13 @@ void DBImpl::SyncCallFlush(std::vector<SingleCompactionJob*>& jobs) {
     std::vector<DBCompactionJob> db_jobs;
     for (auto job : jobs) {
       // TODO(WaLSM+): pass temp recorders into NVMFlushJob or NVMFlushJob.build()?
+      /*
+      std::set<uint32_t>* merged_segment_ids; // the merged segments' id, we need to delete them from these 3 global recorders
+      std::map<uint32_t, uint16_t>* new_level_recorder = new std::map<uint32_t, uint16_t>;
+      std::map<uint32_t, std::vector<RangeRatePair>>* new_segment_ranges_recorder = new std::map<uint32_t, std::vector<RangeRatePair>>;
+      std::map<uint32_t, uint32_t>* new_unit_size_recorder = new std::map<uint32_t, uint32_t>;
+      std::vector<std::string>& key_range_seperators = filter_cache_.range_seperators();
+      */
       num_running_flushes_++;
       auto nvm_flush_job = new NVMFlushJob(
           job,
@@ -2658,7 +2665,7 @@ void DBImpl::SyncCallFlush(std::vector<SingleCompactionJob*>& jobs) {
     filter_cache_mutex_.lock();
     // TODO: merge merge temp recorders into global DBImpl recorders.
     // TODO: call filter cache client DBImpl::filter_cache_ update work 
-    // TODO: remember to release temp recorders ptr!!!
+    // TODO: remember to release temp recorders ptr!!!    
     // temp recorders below:
     // std::set<uint32_t>* merged_segment_ids;
     // std::map<uint32_t, uint16_t>* new_level_recorder;
@@ -3000,7 +3007,6 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
   // TODO(WaLSM+): you can pass these var into CompactionJob and update them when compacting
 
   IOStatus io_s;
-  // TODO(WaLSM+): which branch we will get into? the last one?
   if (!c) {
     // Nothing to do
     ROCKS_LOG_BUFFER(log_buffer, "Compaction nothing to do");
@@ -3021,6 +3027,13 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     
     // TODO(WaLSM+): no new SST generated, we only record deleted segment id?
     //               maybe we need to record segment ids for every SST for convience?
+    /*
+      std::set<uint32_t>* merged_segment_ids; // the merged segments' id, we need to delete them from these 3 global recorders
+      std::map<uint32_t, uint16_t>* new_level_recorder = new std::map<uint32_t, uint16_t>;
+      std::map<uint32_t, std::vector<RangeRatePair>>* new_segment_ranges_recorder = new std::map<uint32_t, std::vector<RangeRatePair>>;
+      std::map<uint32_t, uint32_t>* new_unit_size_recorder = new std::map<uint32_t, uint32_t>;
+      std::vector<std::string>& key_range_seperators = filter_cache_.range_seperators();
+    */
     for (const auto& f : *c->inputs(0)) {
       c->edit()->DeleteFile(c->level(), f->fd.GetNumber());
     }
@@ -3068,6 +3081,13 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
         //               this will delete these segments' outdate info from global recorders 
         //               then insert these segments' latest info into global recorders 
         //               maybe we need to record segment ids for every SST for convience?
+        /*
+          std::set<uint32_t>* merged_segment_ids; // the merged segments' id, we need to delete them from these 3 global recorders
+          std::map<uint32_t, uint16_t>* new_level_recorder = new std::map<uint32_t, uint16_t>;
+          std::map<uint32_t, std::vector<RangeRatePair>>* new_segment_ranges_recorder = new std::map<uint32_t, std::vector<RangeRatePair>>;
+          std::map<uint32_t, uint32_t>* new_unit_size_recorder = new std::map<uint32_t, uint32_t>;
+          std::vector<std::string>& key_range_seperators = filter_cache_.range_seperators();
+        */
         FileMetaData* f = c->input(l, i);
         c->edit()->DeleteFile(c->level(l), f->fd.GetNumber());
         c->edit()->AddFile(c->output_level(), f->fd.GetNumber(),
@@ -3160,6 +3180,13 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
                        &earliest_write_conflict_snapshot, &snapshot_checker);
     assert(is_snapshot_supported_ || snapshots_.empty());
     // TODO: pass temp recorders into CompactionJob or CompactionJob.Run()?
+    /*
+      std::set<uint32_t>* merged_segment_ids; // the merged segments' id, we need to delete them from these 3 global recorders
+      std::map<uint32_t, uint16_t>* new_level_recorder = new std::map<uint32_t, uint16_t>;
+      std::map<uint32_t, std::vector<RangeRatePair>>* new_segment_ranges_recorder = new std::map<uint32_t, std::vector<RangeRatePair>>;
+      std::map<uint32_t, uint32_t>* new_unit_size_recorder = new std::map<uint32_t, uint32_t>;
+      std::vector<std::string>& key_range_seperators = filter_cache_.range_seperators();
+    */
     CompactionJob compaction_job(
         job_context->job_id, c.get(), immutable_db_options_,
         file_options_for_compaction_, versions_.get(), &shutting_down_,
