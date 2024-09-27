@@ -323,6 +323,7 @@ void FilterCacheManager::try_retrain_model(std::map<uint32_t, uint16_t>& level_r
     assert(unit_size_recorder.size() == 0);
     auto get_cnt_it = last_count_recorder_.begin();
     while (get_cnt_it != last_count_recorder_.end()) {
+        // unit_size_recorder always empty, so we only use DEFAULT_UNIT_SIZE
         algo_infos.insert(std::make_pair(get_cnt_it->first, SegmentAlgoInfo(get_cnt_it->second, DEFAULT_UNIT_SIZE)));
         get_cnt_it ++;
     }
@@ -514,7 +515,7 @@ void FilterCacheManager::insert_segments(std::vector<uint32_t>& merged_segment_i
 
     // pick up merged or new level 0 segments
     // assume level_recorder keys set equals to merged_segment_ids + new_segment_ids
-    assert(merged_segment_ids.size() + new_segment_ids.size() == level_recorder.size());
+    assert(new_segment_ids.size() == 0 || merged_segment_ids.size() + new_segment_ids.size() == level_recorder.size());
     auto level_it = level_recorder.begin();
     size_t merged_idx = 0, new_idx = 0;
     while(level_it != level_recorder.end()) {

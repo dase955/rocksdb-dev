@@ -101,10 +101,10 @@ void FilterCacheClient::make_adjustment() {
     pool_.submit_detach(do_make_adjustment);
 }
 
-void FilterCacheClient::do_batch_insert_segments(std::vector<uint32_t> merged_segment_ids, std::vector<uint32_t> new_segment_ids,
-                                                 std::map<uint32_t, std::unordered_map<uint32_t, double>> inherit_infos_recorder,
-                                                 std::map<uint32_t, uint16_t> level_recorder, const uint32_t& level_0_base_count,
-                                                 std::map<uint32_t, std::vector<RangeRatePair>> segment_ranges_recorder) {
+void FilterCacheClient::do_batch_insert_segments(std::vector<uint32_t>& merged_segment_ids, std::vector<uint32_t>& new_segment_ids,
+                                                 std::map<uint32_t, std::unordered_map<uint32_t, double>>& inherit_infos_recorder,
+                                                 std::map<uint32_t, uint16_t>& level_recorder, const uint32_t& level_0_base_count,
+                                                 std::map<uint32_t, std::vector<RangeRatePair>>& segment_ranges_recorder) {
     filter_cache_manager_.insert_segments(merged_segment_ids, new_segment_ids, inherit_infos_recorder,
                                           level_recorder, level_0_base_count, segment_ranges_recorder);
 }
