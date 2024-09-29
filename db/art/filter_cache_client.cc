@@ -113,6 +113,10 @@ void FilterCacheClient::batch_insert_segments(std::vector<uint32_t> merged_segme
                                               std::map<uint32_t, std::unordered_map<uint32_t, double>> inherit_infos_recorder,
                                               std::map<uint32_t, uint16_t> level_recorder, const uint32_t& level_0_base_count,
                                               std::map<uint32_t, std::vector<RangeRatePair>> segment_ranges_recorder) {
+    assert(merged_segment_ids.size() > 0 && new_segment_ids.size() > 0);
+    assert(new_segment_ids.size() == inherit_infos_recorder.size());
+    assert(merged_segment_ids.size() + new_segment_ids.size() == level_recorder.size());
+    assert(new_segment_ids.size() == segment_ranges_recorder.size());
     if (level_0_base_count == 0) {
         pool_.submit_detach(do_batch_insert_segments, merged_segment_ids, new_segment_ids, inherit_infos_recorder, level_recorder, INIT_LEVEL_0_COUNT, segment_ranges_recorder);
     } else {
