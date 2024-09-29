@@ -207,6 +207,8 @@ namespace ROCKSDB_NAMESPACE {
 #define INIT_LEVEL_0_COUNT 0
 // default size of one filter unit (bits)
 #define DEFAULT_UNIT_SIZE 0
+// inherit remain factor
+#define INHERIT_REMAIN_FACTOR 0.5
 
 // filter cache client background threads num
 #define FILTER_CACHE_THREADS_NUM 10

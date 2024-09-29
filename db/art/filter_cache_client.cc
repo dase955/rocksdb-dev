@@ -120,4 +120,29 @@ void FilterCacheClient::batch_insert_segments(std::vector<uint32_t> merged_segme
     }
 }
 
+void FilterCacheClient::do_batch_delete_segments(std::vector<uint32_t>& merged_segment_ids, std::map<uint32_t, uint16_t>& level_recorder) {
+    filter_cache_manager_.delete_segments(merged_segment_ids, level_recorder);
+}
+
+void FilterCacheClient::batch_delete_segments(std::vector<uint32_t> merged_segment_ids, std::map<uint32_t, uint16_t> level_recorder) {
+    assert(merged_segment_ids.size() == level_recorder.size());
+    pool_.submit_detach(do_batch_delete_segments, merged_segment_ids, level_recorder);
+}
+
+void FilterCacheClient::do_batch_move_segments(std::vector<uint32_t>& moved_segment_ids,
+                                               std::map<uint32_t, uint16_t>& old_level_recorder,
+                                               std::map<uint32_t, uint16_t>& move_level_recorder,
+                                               std::map<uint32_t, std::vector<RangeRatePair>>& move_segment_ranges_recorder) {
+    filter_cache_manager_.move_segments(moved_segment_ids, old_level_recorder, move_level_recorder, move_segment_ranges_recorder);                                         
+}
+
+void FilterCacheClient::batch_move_segments(std::vector<uint32_t> moved_segment_ids,
+                                            std::map<uint32_t, uint16_t> old_level_recorder,
+                                            std::map<uint32_t, uint16_t> move_level_recorder,
+                                            std::map<uint32_t, std::vector<RangeRatePair>> move_segment_ranges_recorder) {
+    assert(moved_segment_ids.size() == move_level_recorder.size());
+    assert(moved_segment_ids.size() == move_segment_ranges_recorder.size());
+    pool_.submit_detach(do_batch_move_segments, moved_segment_ids, old_level_recorder, move_level_recorder, move_segment_ranges_recorder);                                     
+}
+
 }
