@@ -2546,12 +2546,12 @@ void DBImpl::SyncCallFlush(std::vector<SingleCompactionJob*>& jobs) {
     // you may need filter_cache_.range_seperators() to receive key range seperators
     // exactly, if key k < seperators[i+1] and key k >= seperators[i], then key k hit key range i
     // HeatBuckets::locate(const std::string& key) will tell you how to binary search corresponding key range for one key
-    std::vector<uint32_t>* merged_segment_ids = new std::vector<uint32_t>; // the merged segments' id, we need to delete them from these 3 global recorders
+    std::set<uint32_t>* merged_segment_ids = new std::set<uint32_t>; // the merged segments' id, we need to delete them from these 3 global recorders
     std::map<uint32_t, uint16_t>* new_level_recorder = new std::map<uint32_t, uint16_t>;
     std::map<uint32_t, std::vector<RangeRatePair>>* new_segment_ranges_recorder = new std::map<uint32_t, std::vector<RangeRatePair>>;
     std::map<uint32_t, uint32_t>* new_unit_size_recorder = new std::map<uint32_t, uint32_t>;
     std::vector<std::string>& key_range_seperators = filter_cache_.range_seperators();
-    std::vector<uint32_t>* new_segment_ids = new std::vector<uint32_t>;
+    std::set<uint32_t>* new_segment_ids = new std::set<uint32_t>;
     std::map<uint32_t, std::unordered_map<uint32_t, double>>* inherit_infos_recorder = new std::map<uint32_t, std::unordered_map<uint32_t, double>>;
     // TODO(WaLSM+): you can pass these var into NVMFlushJob and update them when flushing
   #endif
@@ -2561,12 +2561,12 @@ void DBImpl::SyncCallFlush(std::vector<SingleCompactionJob*>& jobs) {
     for (auto job : jobs) {
       // TODO(WaLSM+): pass temp recorders into NVMFlushJob or NVMFlushJob.build()?
       /*
-      std::vector<uint32_t>* merged_segment_ids = new std::vector<uint32_t>; // the merged segments' id, we need to delete them from these 3 global recorders
+      std::set<uint32_t>* merged_segment_ids = new std::set<uint32_t>; // the merged segments' id, we need to delete them from these 3 global recorders
       std::map<uint32_t, uint16_t>* new_level_recorder = new std::map<uint32_t, uint16_t>;
       std::map<uint32_t, std::vector<RangeRatePair>>* new_segment_ranges_recorder = new std::map<uint32_t, std::vector<RangeRatePair>>;
       std::map<uint32_t, uint32_t>* new_unit_size_recorder = new std::map<uint32_t, uint32_t>;
       std::vector<std::string>& key_range_seperators = filter_cache_.range_seperators();
-      std::vector<uint32_t>* new_segment_ids = new std::vector<uint32_t>;
+      std::set<uint32_t>* new_segment_ids = new std::set<uint32_t>;
       std::map<uint32_t, std::unordered_map<uint32_t, double>>* inherit_infos_recorder = new std::map<uint32_t, std::unordered_map<uint32_t, double>>;
       */
       num_running_flushes_++;
@@ -2724,16 +2724,19 @@ void DBImpl::SyncCallFlush(std::vector<SingleCompactionJob*>& jobs) {
     // call filter cache client DBImpl::filter_cache_ update work 
     assert(merged_segment_ids->empty());
     assert(inherit_infos_recorder->empty());
-    filter_cache_.batch_insert_segments(*merged_segment_ids, *new_segment_ids, *inherit_infos_recorder,
+    std::vector<uint32_t> merged_segment_ids_vec, new_segment_ids_vec;
+    merged_segment_ids_vec.assign(merged_segment_ids.begin(), merged_segment_ids.end());
+    new_segment_ids_vec.assign(new_segment_ids.begin(), new_segment_ids.end());
+    filter_cache_.batch_insert_segments(merged_segment_ids_vec, new_segment_ids_vec, *inherit_infos_recorder,
                                         *new_level_recorder, 0, *new_segment_ranges_recorder);
     
     // temp recorders below:
-    // std::vector<uint32_t>* merged_segment_ids = new std::vector<uint32_t>; // the merged segments' id, we need to delete them from these 3 global recorders
+    // std::set<uint32_t>* merged_segment_ids = new std::set<uint32_t>; // the merged segments' id, we need to delete them from these 3 global recorders
     // std::map<uint32_t, uint16_t>* new_level_recorder = new std::map<uint32_t, uint16_t>;
     // std::map<uint32_t, std::vector<RangeRatePair>>* new_segment_ranges_recorder = new std::map<uint32_t, std::vector<RangeRatePair>>;
     // std::map<uint32_t, uint32_t>* new_unit_size_recorder = new std::map<uint32_t, uint32_t>;
     // std::vector<std::string>& key_range_seperators = filter_cache_.range_seperators();
-    // std::vector<uint32_t>* new_segment_ids = new std::vector<uint32_t>;
+    // std::set<uint32_t>* new_segment_ids = new std::set<uint32_t>;
     // std::map<uint32_t, std::unordered_map<uint32_t, double>>* inherit_infos_recorder = new std::map<uint32_t, std::unordered_map<uint32_t, double>>;
     // these global recorders need to be latest after every flush or compaction:
     // std::map<uint32_t, uint16_t>* level_recorder_
@@ -3074,12 +3077,12 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
   // you may need filter_cache_.range_seperators() to receive key range seperators
   // exactly, if key k < seperators[i+1] and key k >= seperators[i], then key k hit key range i
   // HeatBuckets::locate(const std::string& key) will tell you how to binary search corresponding key range for one key
-  std::vector<uint32_t>* merged_segment_ids = new std::vector<uint32_t>; // the merged segments' id, we need to delete them from these 3 global recorders
+  std::set<uint32_t>* merged_segment_ids = new std::set<uint32_t>; // the merged segments' id, we need to delete them from these 3 global recorders
   std::map<uint32_t, uint16_t>* new_level_recorder = new std::map<uint32_t, uint16_t>;
   std::map<uint32_t, std::vector<RangeRatePair>>* new_segment_ranges_recorder = new std::map<uint32_t, std::vector<RangeRatePair>>;
   std::map<uint32_t, uint32_t>* new_unit_size_recorder = new std::map<uint32_t, uint32_t>;
   std::vector<std::string>& key_range_seperators = filter_cache_.range_seperators();
-  std::vector<uint32_t>* new_segment_ids = new std::vector<uint32_t>;
+  std::set<uint32_t>* new_segment_ids = new std::set<uint32_t>;
   std::map<uint32_t, std::unordered_map<uint32_t, double>>* inherit_infos_recorder = new std::map<uint32_t, std::unordered_map<uint32_t, double>>;
   // TODO(WaLSM+): you can pass these var into NVMFlushJob and update them when compacting
   int compaction_flag = 0; // 0 = not defined, 1 = delete compaction, 2 = trivial compaction, 3 = other
@@ -3110,7 +3113,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     compaction_flag = 1;
   #endif
     /*
-      std::vector<uint32_t>* merged_segment_ids = new std::vector<uint32_t>; 
+      std::set<uint32_t>* merged_segment_ids = new std::set<uint32_t>; 
       // the merged segments' id, we need to delete them from these 3 global recorders
     */
     for (const auto& f : *c->inputs(0)) {
@@ -3161,7 +3164,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
         //               then record these moved segments' new level to new_level_recorder
         //               maybe we need to record segment ids for every SST for convience?
         /*
-          std::vector<uint32_t>* merged_segment_ids; 
+          std::set<uint32_t>* merged_segment_ids; 
           // the merged segments' id, we need to delete them from these 3 global recorders
           std::map<uint32_t, uint16_t>* new_level_recorder = new std::map<uint32_t, uint16_t>;
         */
@@ -3256,14 +3259,17 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     GetSnapshotContext(job_context, &snapshot_seqs,
                        &earliest_write_conflict_snapshot, &snapshot_checker);
     assert(is_snapshot_supported_ || snapshots_.empty());
-    // TODO: pass temp recorders into CompactionJob or CompactionJob.Run()?
-    /*
-      std::vector<uint32_t>* merged_segment_ids; // the merged segments' id, we need to delete them from these 3 global recorders
-      std::map<uint32_t, uint16_t>* new_level_recorder = new std::map<uint32_t, uint16_t>;
-      std::map<uint32_t, std::vector<RangeRatePair>>* new_segment_ranges_recorder = new std::map<uint32_t, std::vector<RangeRatePair>>;
-      std::map<uint32_t, uint32_t>* new_unit_size_recorder = new std::map<uint32_t, uint32_t>;
-      std::vector<std::string>& key_range_seperators = filter_cache_.range_seperators();
-    */
+  #ifdef ART_PLUS
+    compaction_flag = 3; // sign for normal compaction (merge -> split)
+  #endif
+    // TODO(WaLSM): pass temp recorders into CompactionJob or CompactionJob.Run()? it is normal compaction
+    // std::set<uint32_t>* merged_segment_ids = new std::set<uint32_t>; // the merged segments' id, we need to delete them from these 3 global recorders
+    // std::map<uint32_t, uint16_t>* new_level_recorder = new std::map<uint32_t, uint16_t>;
+    // std::map<uint32_t, std::vector<RangeRatePair>>* new_segment_ranges_recorder = new std::map<uint32_t, std::vector<RangeRatePair>>;
+    // std::map<uint32_t, uint32_t>* new_unit_size_recorder = new std::map<uint32_t, uint32_t>; // you can left this recorder aside and do nothing
+    // std::vector<std::string>& key_range_seperators = filter_cache_.range_seperators();
+    // std::set<uint32_t>* new_segment_ids = new std::set<uint32_t>;
+    // std::map<uint32_t, std::unordered_map<uint32_t, double>>* inherit_infos_recorder = new std::map<uint32_t, std::unordered_map<uint32_t, double>>;
     CompactionJob compaction_job(
         job_context->job_id, c.get(), immutable_db_options_,
         file_options_for_compaction_, versions_.get(), &shutting_down_,
@@ -3416,7 +3422,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
   // TODO(WaLSM+): if all ok, merge temp recorders into global DBImpl recorders. 
   //               we need a mutex to guarantee these recorders modified by only one background thread at one time
   filter_cache_mutex_.lock();
-  assert(compaction_flag != 0);
+  assert(compaction_flag >= 0 && compaction_flag <= 3);
   if (compaction_flag == 1) {
 
     // remove merged segments
@@ -3476,17 +3482,17 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     assert(new_segment_ranges_recorder->empty());
     // new segments id empty, that will not fit in batch_insert_segments
     // we need a new method batch_delete_segments to only delete merge segments
-    // filter_cache_.batch_insert_segments(merged_segment_ids, new_segment_ids, inherit_infos_recorder,
-    //                                     new_level_recorder, 0, new_segment_ranges_recorder);
-    filter_cache_.batch_delete_segments(*merged_segment_ids, merged_level_recorder);
+    std::vector<uint32_t> merged_segment_ids_vec;
+    merged_segment_ids_vec.assign(merged_segment_ids.begin(), merged_segment_ids.end());
+    filter_cache_.batch_delete_segments(merged_segment_ids_vec, merged_level_recorder);
       
     // temp recorders below:
-    // std::vector<uint32_t>* merged_segment_ids = new std::vector<uint32_t>; // the merged segments' id, we need to delete them from these 3 global recorders
+    // std::set<uint32_t>* merged_segment_ids = new std::set<uint32_t>; // the merged segments' id, we need to delete them from these 3 global recorders
     // std::map<uint32_t, uint16_t>* new_level_recorder = new std::map<uint32_t, uint16_t>;
     // std::map<uint32_t, std::vector<RangeRatePair>>* new_segment_ranges_recorder = new std::map<uint32_t, std::vector<RangeRatePair>>;
     // std::map<uint32_t, uint32_t>* new_unit_size_recorder = new std::map<uint32_t, uint32_t>;
     // std::vector<std::string>& key_range_seperators = filter_cache_.range_seperators();
-    // std::vector<uint32_t>* new_segment_ids = new std::vector<uint32_t>;
+    // std::set<uint32_t>* new_segment_ids = new std::set<uint32_t>;
     // std::map<uint32_t, std::unordered_map<uint32_t, double>>* inherit_infos_recorder = new std::map<uint32_t, std::unordered_map<uint32_t, double>>;
     // these global recorders need to be latest after every flush or compaction:
     // std::map<uint32_t, uint16_t>* level_recorder_
@@ -3554,16 +3560,17 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
 
     // call filter cache client DBImpl::filter_cache_ update work 
     // we need a new filter cache operation to support moving segments to a new level 
-    // filter_cache_.batch_delete_segments(merged_segment_ids, merged_level_recorder);
-    filter_cache_.batch_move_segments(*merged_segment_ids, old_level_recorder, *new_level_recorder, *new_segment_ranges_recorder);
+    std::vector<uint32_t> merged_segment_ids_vec;
+    merged_segment_ids_vec.assign(merged_segment_ids.begin(), merged_segment_ids.end());
+    filter_cache_.batch_move_segments(merged_segment_ids_vec, old_level_recorder, *new_level_recorder, *new_segment_ranges_recorder);
       
     // temp recorders below:
-    // std::vector<uint32_t>* merged_segment_ids = new std::vector<uint32_t>; // the merged segments' id, we need to delete them from these 3 global recorders
+    // std::set<uint32_t>* merged_segment_ids = new std::set<uint32_t>; // the merged segments' id, we need to delete them from these 3 global recorders
     // std::map<uint32_t, uint16_t>* new_level_recorder = new std::map<uint32_t, uint16_t>;
     // std::map<uint32_t, std::vector<RangeRatePair>>* new_segment_ranges_recorder = new std::map<uint32_t, std::vector<RangeRatePair>>;
     // std::map<uint32_t, uint32_t>* new_unit_size_recorder = new std::map<uint32_t, uint32_t>;
     // std::vector<std::string>& key_range_seperators = filter_cache_.range_seperators();
-    // std::vector<uint32_t>* new_segment_ids = new std::vector<uint32_t>;
+    // std::set<uint32_t>* new_segment_ids = new std::set<uint32_t>;
     // std::map<uint32_t, std::unordered_map<uint32_t, double>>* inherit_infos_recorder = new std::map<uint32_t, std::unordered_map<uint32_t, double>>;
     // these global recorders need to be latest after every flush or compaction:
     // std::map<uint32_t, uint16_t>* level_recorder_
@@ -3642,16 +3649,19 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
 
     // call filter cache client DBImpl::filter_cache_ update work 
     assert(inherit_infos_recorder->size() == new_segment_ids->size());
-    filter_cache_.batch_insert_segments(*merged_segment_ids, *new_segment_ids, *inherit_infos_recorder,
+    std::vector<uint32_t> merged_segment_ids_vec, new_segment_ids_vec;
+    merged_segment_ids_vec.assign(merged_segment_ids.begin(), merged_segment_ids.end());
+    new_segment_ids_vec.assign(new_segment_ids.begin(), new_segment_ids.end());
+    filter_cache_.batch_insert_segments(merged_segment_ids_vec, new_segment_ids_vec, *inherit_infos_recorder,
                                         *new_level_recorder, 0, *new_segment_ranges_recorder);
     
     // temp recorders below:
-    // std::vector<uint32_t>* merged_segment_ids = new std::vector<uint32_t>; // the merged segments' id, we need to delete them from these 3 global recorders
+    // std::set<uint32_t>* merged_segment_ids = new std::set<uint32_t>; // the merged segments' id, we need to delete them from these 3 global recorders
     // std::map<uint32_t, uint16_t>* new_level_recorder = new std::map<uint32_t, uint16_t>;
     // std::map<uint32_t, std::vector<RangeRatePair>>* new_segment_ranges_recorder = new std::map<uint32_t, std::vector<RangeRatePair>>;
     // std::map<uint32_t, uint32_t>* new_unit_size_recorder = new std::map<uint32_t, uint32_t>;
     // std::vector<std::string>& key_range_seperators = filter_cache_.range_seperators();
-    // std::vector<uint32_t>* new_segment_ids = new std::vector<uint32_t>;
+    // std::set<uint32_t>* new_segment_ids = new std::set<uint32_t>;
     // std::map<uint32_t, std::unordered_map<uint32_t, double>>* inherit_infos_recorder = new std::map<uint32_t, std::unordered_map<uint32_t, double>>;
     // these global recorders need to be latest after every flush or compaction:
     // std::map<uint32_t, uint16_t>* level_recorder_
