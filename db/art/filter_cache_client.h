@@ -8,6 +8,9 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+// global mutex to control global level recorder, ... 
+static std::mutex global_recorder_mutex_;
+
 class FilterCacheClient;
 
 class FilterCacheClient {

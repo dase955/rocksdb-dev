@@ -30,33 +30,36 @@ void FilterCacheClient::do_retrain_or_keep_model(std::vector<uint16_t>* const fe
                                                  std::map<uint32_t, uint32_t>* const unit_size_recorder) {
     std::map<uint32_t, uint16_t> level_copy;
     std::map<uint32_t, std::vector<RangeRatePair>> segment_ranges_copy;
+    std::map<uint32_t, uint32_t> unit_size_copy;
     // if this func background monitor signal, how can it receive latest argument? input pointer!
     while (!filter_cache_manager_.heat_buckets_ready());
     while (!filter_cache_manager_.ready_work()); // wait for manager ready
     assert(filter_cache_manager_.heat_buckets_ready()); // must guarantee that heat buckets ready before we make filter cache manager ready
+    
     // actually we will load data before we test, so we can ensure that heat buckets ready first
     filter_cache_manager_.make_clf_model_ready(*features_nums_except_level_0);
-    while (level_recorder->size() != segment_ranges_recorder->size());
-    level_copy = *level_recorder; segment_ranges_copy = *segment_ranges_recorder;
-    while (level_copy.size() != segment_ranges_copy.size()) {
-        while (level_recorder->size() != segment_ranges_recorder->size());
-        level_copy = *level_recorder; segment_ranges_copy = *segment_ranges_recorder;
-    }
-    assert(unit_size_recorder->size() == 0); // should be empty, then we use default unit size DEFAULT_UNIT_SIZE
-    filter_cache_manager_.try_retrain_model(level_copy, segment_ranges_copy, *unit_size_recorder);
+    // lock and copy recorders
+    global_recorder_mutex_.lock();
+    level_copy = *level_recorder; 
+    segment_ranges_copy = *segment_ranges_recorder;
+    unit_size_copy = *unit_size_recorder;
+    global_recorder_mutex_.unlock();
+    // train first time, before that, there is no model left
+    filter_cache_manager_.try_retrain_model(level_copy, segment_ranges_copy, unit_size_copy);
     filter_cache_manager_.update_cache_and_heap(level_copy, segment_ranges_copy);
 
+    // retrain in long periods
     while (true) {
         // in one long period
         while (!filter_cache_manager_.need_retrain()); // wait for long period end
-        while (level_recorder->size() != segment_ranges_recorder->size());
-        level_copy = *level_recorder; segment_ranges_copy = *segment_ranges_recorder;
-        while (level_copy.size() != segment_ranges_copy.size()) {
-            while (level_recorder->size() != segment_ranges_recorder->size());
-            level_copy = *level_recorder; segment_ranges_copy = *segment_ranges_recorder;
-        }
-        assert(unit_size_recorder->size() == 0); // should be empty, then we use default unit size DEFAULT_UNIT_SIZE
-        filter_cache_manager_.try_retrain_model(level_copy, segment_ranges_copy, *unit_size_recorder);
+        // lock and copy recorders
+        global_recorder_mutex_.lock();
+        level_copy = *level_recorder; 
+        segment_ranges_copy = *segment_ranges_recorder;
+        unit_size_copy = *unit_size_recorder;
+        global_recorder_mutex_.unlock();
+        // train first time, before that, there is no model left
+        filter_cache_manager_.try_retrain_model(level_copy, segment_ranges_copy, unit_size_copy);
         filter_cache_manager_.update_cache_and_heap(level_copy, segment_ranges_copy);
     }
     // this loop never end

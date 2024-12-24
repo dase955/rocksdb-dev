@@ -111,7 +111,7 @@ void FilterCache::release_for_segments(std::vector<uint32_t>& segment_ids, std::
     filter_cache_mutex_.lock();
     auto it = filter_cache_.begin();
     size_t idx = 0;
-    while(it != filter_cache_.end() && idx < segment_ids.size()) {
+    while (it != filter_cache_.end() && idx < segment_ids.size()) {
         if (it->first < segment_ids[idx]) {
             it ++;
         } else if (it->first > segment_ids[idx]) {
@@ -136,6 +136,7 @@ bool FilterCacheManager::make_heat_buckets_ready(const std::string& key,
             assert((it->second).size() == 2);
             segments_infos.emplace_back(it->second);
         }
+        // segments_infos can be empty, then use default number of buckets
         heat_buckets_.sample(key, segments_infos);
     }
     return heat_buckets_.is_ready();
@@ -218,6 +219,8 @@ void FilterCacheManager::update_count_recorder() {
 
 void FilterCacheManager::inherit_count_recorder(std::vector<uint32_t>& merged_segment_ids, std::vector<uint32_t>& new_segment_ids,  const uint32_t& level_0_base_count,
                                                 std::map<uint32_t, std::unordered_map<uint32_t, double>>& inherit_infos_recorder) {
+    count_mutex_.lock();
+
     std::map<uint32_t, uint32_t> merged_last_count_recorder, merged_current_count_recorder; // cache merged segment count temporarily
     for (uint32_t& merged_segment_id : merged_segment_ids) {
         merged_last_count_recorder.insert(std::make_pair(merged_segment_id, last_count_recorder_[merged_segment_id]));
@@ -237,8 +240,6 @@ void FilterCacheManager::inherit_count_recorder(std::vector<uint32_t>& merged_se
         new_last_count_recorder.insert(std::make_pair(infos_it->first, uint32_t(last_count)));
         new_current_count_recorder.insert(std::make_pair(infos_it->first, uint32_t(current_count)));
     }
-
-    count_mutex_.lock();
 
     for (uint32_t& new_segment_id : new_segment_ids) {
         auto last_it = last_count_recorder_.find(new_segment_id);
@@ -401,6 +402,10 @@ void FilterCacheManager::try_retrain_model(std::map<uint32_t, uint16_t>& level_r
         }
     }
 
+    // check three vectors have same length
+    assert(datas.size() == labels.size());
+    assert(get_cnts.size() == labels.size());
+
     clf_model_.make_train(datas, labels, get_cnts);
 
     train_signal_ = false;
@@ -518,7 +523,7 @@ void FilterCacheManager::insert_segments(std::vector<uint32_t>& merged_segment_i
     assert(new_segment_ids.size() == 0 || merged_segment_ids.size() + new_segment_ids.size() == level_recorder.size());
     auto level_it = level_recorder.begin();
     size_t merged_idx = 0, new_idx = 0;
-    while(level_it != level_recorder.end()) {
+    while (level_it != level_recorder.end()) {
         if (merged_idx < merged_segment_ids.size() && level_it->first == merged_segment_ids[merged_idx]) {
             if (level_it->second == 0) {
                 old_level_0_segment_ids.insert(level_it->first);
@@ -643,10 +648,11 @@ void FilterCacheManager::delete_segments(std::vector<uint32_t>& merged_segment_i
     std::set<uint32_t> old_level_0_segment_ids;
     std::sort(merged_segment_ids.begin(), merged_segment_ids.end());
 
+    // level_recorder is a copy of global level_recorder
     assert(merged_segment_ids.size() == level_recorder.size());
     auto level_it = level_recorder.begin();
     size_t merged_idx = 0;
-    while(level_it != level_recorder.end()) {
+    while (level_it != level_recorder.end()) {
         assert(merged_idx < merged_segment_ids.size() && level_it->first == merged_segment_ids[merged_idx]);
         if (merged_idx < merged_segment_ids.size() && level_it->first == merged_segment_ids[merged_idx]) {
             if (level_it->second == 0) {
@@ -693,7 +699,7 @@ void FilterCacheManager::move_segments(std::vector<uint32_t>& moved_segment_ids,
     assert(moved_segment_ids.size() == move_segment_ranges_recorder.size());
     auto level_it = old_level_recorder.begin();
     size_t moved_idx = 0, new_idx = 0;
-    while(level_it != old_level_recorder.end()) {
+    while (level_it != old_level_recorder.end()) {
         assert(moved_idx < moved_segment_ids.size() && level_it->first == moved_segment_ids[moved_idx]);
         if (moved_idx < moved_segment_ids.size() && level_it->first == moved_segment_ids[moved_idx]) {
             if (level_it->second == 0) {

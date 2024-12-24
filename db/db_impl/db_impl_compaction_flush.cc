@@ -2702,6 +2702,8 @@ void DBImpl::SyncCallFlush(std::vector<SingleCompactionJob*>& jobs) {
     }
     */
 
+    // lock and update global recorders
+    global_recorder_mutex_.lock();
     // merge merge temp recorders into global DBImpl recorders.
     assert(new_level_recorder->size() == new_segment_ranges_recorder->size());
     auto new_level_it = new_level_recorder->begin();
@@ -2720,6 +2722,7 @@ void DBImpl::SyncCallFlush(std::vector<SingleCompactionJob*>& jobs) {
       // we only use DEFAULT_UNIT_SIZE
       new_units_it ++;
     }
+    global_recorder_mutex_.unlock();
     
     // call filter cache client DBImpl::filter_cache_ update work 
     assert(merged_segment_ids->empty());
@@ -3424,7 +3427,8 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
   filter_cache_mutex_.lock();
   assert(compaction_flag >= 0 && compaction_flag <= 3);
   if (compaction_flag == 1) {
-
+    // lock and update global recorders
+    global_recorder_mutex_.lock();
     // remove merged segments
     auto level_it = level_recorder_->begin();
     auto range_it = segment_ranges_recorder_->begin();
@@ -3452,6 +3456,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
         units_it ++;
       }
     }
+    global_recorder_mutex_.unlock();
 
     // merge merge temp recorders into global DBImpl recorders.
     assert(new_level_recorder->empty());
@@ -3508,6 +3513,8 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     delete inherit_infos_recorder;
 
   } else if (compaction_flag == 2) {
+    // lock and update global recorders
+    global_recorder_mutex_.lock();
     // modify segments' level
     auto level_it = level_recorder_->begin();
     auto range_it = segment_ranges_recorder_->begin();
@@ -3530,6 +3537,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
         range_it ++;
       }
     }
+
     assert(unit_size_recorder_->empty());
     /*
     while (units_it != unit_size_recorder_->end()) {
@@ -3557,6 +3565,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
       // unit_size_recorder_.insert(std::make_pair(new_units_it->first, new_units_it->second));
       new_units_it ++;
     }
+    global_recorder_mutex_.unlock();
 
     // call filter cache client DBImpl::filter_cache_ update work 
     // we need a new filter cache operation to support moving segments to a new level 
@@ -3589,6 +3598,8 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     // it is normal compaction (merge->split)
     std::map<uint32_t, uint16_t> merged_level_recorder;
 
+    // lock and update global recorders
+    global_recorder_mutex_.lock();
     // remove merged segments
     assert(!(merged_segment_ids->empty()));
     auto level_it = level_recorder_->begin();
@@ -3636,6 +3647,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
       // we only use DEFAULT_UNIT_SIZE
       new_units_it ++;
     }
+    global_recorder_mutex_.unlock();
 
     // make sure that we also input merged segments' level
     // batch_insert_segments argument need both merged and new segments' level
