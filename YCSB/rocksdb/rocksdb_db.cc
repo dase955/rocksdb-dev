@@ -355,7 +355,7 @@ void RocksdbDB::GetOptions(const utils::Properties &props, rocksdb::Options *opt
     opt->table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
 
     if (props.GetProperty(PROP_INCREASE_PARALLELISM, PROP_INCREASE_PARALLELISM_DEFAULT) == "true") {
-      opt->IncreaseParallelism();
+      opt->IncreaseParallelism(32);
     }
     if (props.GetProperty(PROP_OPTIMIZE_LEVELCOMP, PROP_OPTIMIZE_LEVELCOMP_DEFAULT) == "true") {
       opt->OptimizeLevelStyleCompaction();
